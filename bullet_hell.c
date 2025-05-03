@@ -57,6 +57,9 @@ Entity* entity_spawn_player(Game *gp) {
     ENTITY_FLAG_APPLY_FRICTION |
     ENTITY_FLAG_HAS_SPRITE |
     ENTITY_FLAG_CLAMP_POS_TO_SCREEN |
+    ENTITY_FLAG_HAS_BULLET_EMITTER |
+    ENTITY_FLAG_RECEIVE_COLLISION |
+    ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
     0;
 
   ep->update_order = ENTITY_ORDER_LAST;
@@ -70,26 +73,135 @@ Entity* entity_spawn_player(Game *gp) {
   ep->sprite_tint = WHITE;
   ep->sprite_scale = PLAYER_SPRITE_SCALE;
 
-  ep->bounds_color = RED;
+  ep->bullet_emitter.kind = BULLET_EMITTER_KIND_AVENGER;
+  ep->bullet_emitter.flags =
+    0;
+
+  ep->bullet_emitter.cooldown_period = AVENGER_NORMAL_FIRE_COOLDOWN;
+
+  ep->bounds_color = PLAYER_BOUNDS_COLOR;
+  ep->hitbox_color = PLAYER_HITBOX_COLOR;
 
   ep->half_size =
     Vector2Scale(PLAYER_BOUNDS_SIZE, 0.5);
 
+  ep->hitboxes = carray_to_slice(Hitbox, PLAYER_HITBOXES);
+
   return ep;
 }
 
-Slice(Entity_ptr) entity_emit_bullets(Game *gp, Entity *ep) {
-  Arr(Entity_ptr) bullets;
-  arr_init(bullets, gp->frame_scratch);
+Entity* entity_spawn_crab(Game *gp) {
+  Entity *ep = entity_spawn(gp);
 
+  ep->control = ENTITY_CONTROL_CRAB;
+  ep->kind = ENTITY_KIND_CRAB;
+
+  ep->flags =
+    ENTITY_FLAG_DYNAMICS |
+    ENTITY_FLAG_APPLY_FRICTION |
+    //ENTITY_FLAG_HAS_SPRITE |
+    ENTITY_FLAG_FILL_BOUNDS |
+    //ENTITY_FLAG_CLAMP_POS_TO_SCREEN |
+    ENTITY_FLAG_HAS_BULLET_EMITTER |
+    ENTITY_FLAG_RECEIVE_COLLISION |
+    ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
+    0;
+
+  ep->update_order = ENTITY_ORDER_LAST;
+  ep->draw_order = ENTITY_ORDER_FIRST;
+
+  ep->pos = CRAB_INITIAL_DEBUG_POS;
+
+  ep->health = CRAB_HEALTH;
+
+  //ep->sprite = SPRITE_AVENGER;
+  //ep->sprite_tint = WHITE;
+  //ep->sprite_scale = PLAYER_SPRITE_SCALE;
+
+  ep->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB;
+  ep->bullet_emitter.flags =
+    0;
+
+  ep->bullet_emitter.cooldown_period = CRAB_FIRE_COOLDOWN;
+
+  ep->fill_color = MAROON;
+  ep->bounds_color = CRAB_BOUNDS_COLOR;
+  ep->hitbox_color = CRAB_HITBOX_COLOR;
+
+  ep->half_size =
+    Vector2Scale(CRAB_BOUNDS_SIZE, 0.5);
+
+  ep->hitboxes = carray_to_slice(Hitbox, CRAB_HITBOXES);
+
+  return ep;
+}
+
+Entity* entity_spawn_fish(Game *gp) {
+  UNIMPLEMENTED;
+  return 0;
+}
+
+Entity* entity_spawn_stingray(Game *gp) {
+  UNIMPLEMENTED;
+  return 0;
+}
+
+void entity_emit_bullets(Game *gp, Entity *ep) {
 
   switch(ep->bullet_emitter.kind) {
     default:
       UNREACHABLE;
     case BULLET_EMITTER_KIND_AVENGER:
       {
+
+        const int N_ARMS = 3;
+        const float ANGLE_STEP = PI/20.0f;
+        const float INITIAL_ANGLE = -ANGLE_STEP;
+        float angle = INITIAL_ANGLE + ep->bullet_emitter.spin_cur_angle;
+
+        for(int i = 0; i < N_ARMS; i++) {
+
+          Entity *bullet = entity_spawn(gp);
+
+          bullet->kind = ENTITY_KIND_BULLET;
+          bullet->update_order = ENTITY_ORDER_FIRST;
+          bullet->draw_order = ENTITY_ORDER_LAST;
+          bullet->control = ENTITY_CONTROL_AVENGER_BULLET;
+
+          bullet->flags =
+            DEFAULT_BULLET_FLAGS |
+            ENTITY_FLAG_FILL_BOUNDS |
+            //ENTITY_FLAG_DYNAMICS_HAS_CURVE |
+            0;
+
+          bullet->bounds_color = RED;
+          bullet->fill_color = ORANGE;
+
+          //bullet->accel = AVENGER_NORMAL_BULLET_ACCEL;
+
+          Vector2 dir = Vector2Rotate((Vector2){0,-1}, angle);
+
+          bullet->vel = Vector2Scale(dir, 1400);
+          bullet->curve = -0.04f;
+          bullet->pos = Vector2Add(ep->pos, Vector2Scale(dir, 55));
+          bullet->half_size = Vector2Scale(AVENGER_NORMAL_BULLET_BOUNDS_SIZE, 0.5f);
+
+          bullet->apply_collision_mask = PLAYER_APPLY_COLLISION_MASK;
+          bullet->damage_amount = AVENGER_NORMAL_BULLET_DAMAGE;
+
+          bullet->hitboxes = carray_to_slice(Hitbox, AVENGER_NORMAL_BULLET_HITBOXES);
+
+          angle += ANGLE_STEP;
+
+        }
+
+      } break;
+    case BULLET_EMITTER_KIND_CRAB:
+      {
+
+        UNIMPLEMENTED;
+#if !1
         Entity *bullet = entity_spawn(gp);
-        arr_push(bullets, bullet);
 
         bullet->kind = ENTITY_KIND_BULLET;
         bullet->update_order = ENTITY_ORDER_FIRST;
@@ -97,12 +209,21 @@ Slice(Entity_ptr) entity_emit_bullets(Game *gp, Entity *ep) {
         bullet->control = ENTITY_CONTROL_AVENGER_BULLET;
 
         bullet->flags =
-          ENTITY_FLAG_DIE_IF_OFFSCREEN |
-          ENTITY_FLAG_DYNAMICS |
+          DEFAULT_BULLET_FLAGS |
           ENTITY_FLAG_FILL_BOUNDS |
           0;
 
-        bullet->bounds_color = ORANGE;
+        bullet->bounds_color = RED;
+        bullet->fill_color = ORANGE;
+        bullet->vel = AVENGER_NORMAL_BULLET_VELOCITY;
+        bullet->pos = Vector2Add(ep->pos, AVENGER_NORMAL_BULLET_SPAWN_OFFSET);
+        bullet->half_size = Vector2Scale(AVENGER_NORMAL_BULLET_BOUNDS_SIZE, 0.5f);
+
+        bullet->apply_collision_mask = PLAYER_APPLY_COLLISION_MASK;
+        bullet->damage_amount = AVENGER_NORMAL_BULLET_DAMAGE;
+
+        bullet->hitboxes = carray_to_slice(Hitbox, AVENGER_NORMAL_BULLET_HITBOXES);
+#endif
 
       } break;
   }
@@ -110,9 +231,52 @@ Slice(Entity_ptr) entity_emit_bullets(Game *gp, Entity *ep) {
   { /* flags checks */
   } /* flags checks */
 
-  Slice(Entity_ptr) bullets_slice = arr_to_slice(Entity_ptr, bullets);
+}
 
-  return bullets_slice;
+b32 entity_check_hitbox_collision(Game *gp, Entity *a, Entity *b) {
+  Arr(Rectangle) a_recs;
+  frame_arr_init(a_recs);
+
+  for(int i = 0; i < a->hitboxes.count; i++) {
+    Hitbox h = a->hitboxes.d[i];
+
+    Rectangle rec =
+    {
+      a->pos.x + (float)h.min_x,
+      a->pos.y + (float)h.min_y,
+      (float)(h.max_x - h.min_x),
+      (float)(h.max_y - h.min_y),
+    };
+
+    arr_push(a_recs, rec);
+  }
+
+  Arr(Rectangle) b_recs;
+  frame_arr_init(b_recs);
+
+  for(int i = 0; i < b->hitboxes.count; i++) {
+    Hitbox h = b->hitboxes.d[i];
+
+    Rectangle rec =
+    {
+      b->pos.x + (float)h.min_x,
+      b->pos.y + (float)h.min_y,
+      (float)(h.max_x - h.min_x),
+      (float)(h.max_y - h.min_y),
+    };
+
+    arr_push(b_recs, rec);
+  }
+
+  for(int i = 0; i < a_recs.count; i++) {
+    for(int j = 0; j < b_recs.count; j++) {
+      if(CheckCollisionRecs(a_recs.d[i], b_recs.d[j])) {
+        return 1;
+      }
+    }
+  }
+
+  return 0;
 }
 
 void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
@@ -295,6 +459,7 @@ void game_update_and_draw(Game *gp) {
 
     if(IsKeyPressed(KEY_F10)) {
       gp->debug_flags ^= GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS;
+      gp->debug_flags ^= GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_HITBOXES;
     }
 
     if(IsKeyPressed(KEY_F7)) {
@@ -335,6 +500,8 @@ void game_update_and_draw(Game *gp) {
 
           gp->player = entity_spawn_player(gp);
 
+          entity_spawn_crab(gp);
+
           goto update_end;
 
         } break;
@@ -364,15 +531,23 @@ void game_update_and_draw(Game *gp) {
 
         Entity *ep = &gp->entities[i];
 
-        if(!ep->live || ep->update_order != order) continue;
-
-        gp->live_entities++;
-
+        if(ep->live && ep->update_order == order)
         { /* entity_update */
+
+          gp->live_entities++;
+
+          b8 applied_collision = 0;
 
           switch(ep->control) {
             default:
               UNREACHABLE;
+            case ENTITY_CONTROL_AVENGER_BULLET:
+              {
+
+              } break;
+            case ENTITY_CONTROL_CRAB:
+              {
+              } break;
             case ENTITY_CONTROL_PLAYER:
               {
 
@@ -418,6 +593,10 @@ void game_update_and_draw(Game *gp) {
                     ep->accel.y += PLAYER_ACCEL;
                   }
 
+                  if(gp->input_flags & INPUT_FLAG_SLOW_MOVE) {
+                    ep->accel = Vector2Scale(ep->accel, PLAYER_SLOW_FACTOR);
+                  }
+
                 } else {
 
                   // TODO strafing animation for the avenger
@@ -435,6 +614,14 @@ void game_update_and_draw(Game *gp) {
                   ep->vel = (Vector2){0};
                 }
 
+                if(gp->input_flags & INPUT_FLAG_SHOOT) {
+                  ep->bullet_emitter.shooting = 1;
+                }
+
+                if(gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) {
+                  ep->received_damage = 0;
+                }
+
               } break;
           }
 
@@ -444,6 +631,11 @@ void game_update_and_draw(Game *gp) {
             Vector2 a_times_t = Vector2Scale(ep->accel, gp->timestep);
             ep->vel = Vector2Add(ep->vel, a_times_t);
             ep->pos = Vector2Add(ep->pos, Vector2Add(Vector2Scale(ep->vel, gp->timestep), Vector2Scale(a_times_t, 0.5*gp->timestep)));
+
+            if(ep->flags & ENTITY_FLAG_DYNAMICS_HAS_CURVE) {
+              ep->vel = Vector2Rotate(ep->vel, ep->curve);
+            }
+
           }
 
           if(ep->flags & ENTITY_FLAG_APPLY_FRICTION) {
@@ -459,72 +651,104 @@ void game_update_and_draw(Game *gp) {
 
           if(ep->flags & ENTITY_FLAG_HAS_BULLET_EMITTER) {
 
-#if !1
-            if(gp->state == GAME_STATE_MAIN_LOOP) {
+            if(gp->state == GAME_STATE_MAIN_LOOP || gp->state == GAME_STATE_DEBUG_SANDBOX) {
 
-              // TODO refactor missile launcher
-              if(ep->missile_launcher.shooting) {
+              if(ep->bullet_emitter.shooting) {
+                ep->bullet_emitter.shooting = 0;
 
-                if(ep->missile_launcher.flags & MISSILE_LAUNCHER_FLAG_DOUBLE_MISSILES) {
-                  ep->missile_launcher.double_missile_time -= gp->timestep;
-                  if(ep->missile_launcher.double_missile_time < 0) {
-                    ep->missile_launcher.double_missile_time = 0;
-                    ep->missile_launcher.flags &= ~MISSILE_LAUNCHER_FLAG_DOUBLE_MISSILES;
-                  }
+                if(ep->bullet_emitter.cooldown_timer == 0.0f) {
+                  ep->bullet_emitter.cooldown_timer = ep->bullet_emitter.cooldown_period;
+                  entity_emit_bullets(gp, ep);
                 }
 
-                if(ep->missile_launcher.cooldown_timer == 0.0f) {
-
-                  if(ep->missile_launcher.flags & MISSILE_LAUNCHER_FLAG_DOUBLE_MISSILES) {
-                    ep->missile_launcher.cooldown_timer = ep->missile_launcher.cooldown_period;
-
-                    // TODO this is a hack
-
-                    Entity *missile1 = entity_spawn(gp);
-                    ep->missile_launcher.initial_pos = ep->pos;
-                    entity_init_missile_from_launcher(gp, missile1, ep->missile_launcher);
-
-                    missile1->pos.x -= missile1->half_size.x + 10.0f;
-
-                    Entity *missile2 = entity_spawn(gp);
-                    ep->missile_launcher.initial_pos = ep->pos;
-                    entity_init_missile_from_launcher(gp, missile2, ep->missile_launcher);
-
-                    missile2->pos.x += missile1->half_size.x + 10.0f;
-
-                    SetSoundPan(missile1->missile_sound, Normalize(missile1->pos.x, WINDOW_WIDTH, 0));
-                    SetSoundPitch(missile1->missile_sound, Remap(GetRandomValue(0,5), 0, 5, 0.95, 1.0));
-                    PlaySound(missile1->missile_sound);
-
-                    SetSoundPan(missile2->missile_sound, Normalize(missile2->pos.x, WINDOW_WIDTH, 0));
-                    SetSoundPitch(missile2->missile_sound, Remap(GetRandomValue(0,5), 0, 5, 0.95, 1.0));
-                    PlaySound(missile2->missile_sound);
-
-                  } else {
-                    ep->missile_launcher.cooldown_timer = ep->missile_launcher.cooldown_period;
-
-                    Entity *missile = entity_spawn(gp);
-                    ep->missile_launcher.initial_pos = ep->pos;
-                    entity_init_missile_from_launcher(gp, missile, ep->missile_launcher);
-
-                    SetSoundPan(missile->missile_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
-                    SetSoundPitch(missile->missile_sound, Remap(GetRandomValue(0,5), 0, 5, 0.95, 1.0));
-
-                    PlaySound(missile->missile_sound);
-                  }
-
-                }
               }
 
-              if(ep->missile_launcher.cooldown_timer < 0.0f) {
-                ep->missile_launcher.cooldown_timer = 0.0f;
+              if(ep->bullet_emitter.cooldown_timer < 0.0f) {
+                ep->bullet_emitter.cooldown_timer = 0.0f;
               } else {
-                ep->missile_launcher.cooldown_timer -= gp->timestep;
+                ep->bullet_emitter.cooldown_timer -= gp->timestep;
               }
 
             }
 
+          }
+
+          if(ep->flags & ENTITY_FLAG_APPLY_COLLISION) {
+            //Rectangle ep_rec =
+            //{
+            //  ep->pos.x - ep->half_size.x,
+            //  ep->pos.y - ep->half_size.y,
+            //  2 * ep->half_size.x,
+            //  2 * ep->half_size.y,
+            //};
+
+            for(int i = 0; i < MAX_ENTITIES; i++) {
+              Entity *colliding = &gp->entities[i];
+
+              if(colliding->live) {
+
+                if(entity_kind_in_mask(colliding->kind, ep->apply_collision_mask)) {
+                  //Rectangle colliding_rec =
+                  //{
+                  //  colliding->pos.x - colliding->half_size.x,
+                  //  colliding->pos.y - colliding->half_size.y,
+                  //  2 * colliding->half_size.x,
+                  //  2 * colliding->half_size.y,
+                  //};
+
+                  //if(CheckCollisionRecs(ep_rec, colliding_rec)) {
+                  if(entity_check_hitbox_collision(gp, ep, colliding)) {
+                    applied_collision = 1;
+                    colliding->received_collision = 1;
+
+                    if(ep->flags & ENTITY_FLAG_APPLY_COLLISION_DAMAGE) {
+                      colliding->received_damage = ep->damage_amount;
+                    }
+
+                  }
+                  //}
+
+                }
+
+              }
+
+            }
+
+          }
+
+#if 0
+          if(ep->flags & ENTITY_FLAG_HAS_SHIELDS) {
+            if(ep->shields_time > SHIELDS_TIME) {
+              ep->shields_time = 0;
+              ep->flags &= ~ENTITY_FLAG_HAS_SHIELDS;
+            } else {
+              ep->shields_time += gp->timestep;
+              ep->received_damage = 0;
+            }
+          }
 #endif
+
+          if(ep->flags & ENTITY_FLAG_DIE_ON_APPLY_COLLISION) {
+            if(applied_collision) {
+              entity_die(gp, ep);
+              goto entity_update_end;
+            }
+          }
+
+          if(ep->flags & ENTITY_FLAG_RECEIVE_COLLISION) {
+            if(ep->received_collision) {
+              ep->received_collision = 0;
+
+              if(ep->flags & ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE) {
+                ep->health -= ep->received_damage;
+                ep->received_damage = 0;
+                if(ep->health <= 0) {
+                  entity_die(gp, ep);
+                  goto entity_update_end;
+                }
+              }
+
+            }
           }
 
           if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
@@ -532,8 +756,18 @@ void game_update_and_draw(Game *gp) {
           }
 
           if(ep->flags & ENTITY_FLAG_DIE_IF_OFFSCREEN) {
-            entity_die(gp, ep);
-            goto entity_update_end;
+            Rectangle ep_rec =
+            {
+              .x = ep->pos.x - ep->half_size.x,
+              .y = ep->pos.y - ep->half_size.y,
+              .width = TIMES2(ep->half_size.x),
+              .height = TIMES2(ep->half_size.y),
+            };
+
+            if(!CheckCollisionRecs(WINDOW_RECT, ep_rec)) {
+              entity_die(gp, ep);
+              goto entity_update_end;
+            }
           }
 
 entity_update_end:;
@@ -559,16 +793,30 @@ entity_update_end:;
 update_end:;
   } /* update */
 
-  defer_loop((BeginTextureMode(gp->render_texture), ClearBackground(SKYBLUE)), EndTextureMode())
+  defer_loop((BeginTextureMode(gp->render_texture), ClearBackground(DARKBLUE)), EndTextureMode())
   { /* draw */
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
       for(int i = 0; i < MAX_ENTITIES; i++)
-      { /* draw_entities */
+      { /* entity_draw */
 
         Entity *ep = &gp->entities[i];
 
         if(!ep->live || ep->draw_order != order) continue;
+
+        if(ep->flags & ENTITY_FLAG_FILL_BOUNDS) {
+          Color tint = ep->fill_color;
+
+          Rectangle rec =
+          {
+            ep->pos.x - ep->half_size.x,
+            ep->pos.y - ep->half_size.y,
+            2 * ep->half_size.x,
+            2 * ep->half_size.y,
+          };
+
+          DrawRectangleRec(rec, tint);
+        }
 
         if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
           Color tint = ep->sprite_tint;
@@ -585,9 +833,28 @@ update_end:;
           };
 
           DrawRectangleLinesEx(rec, 2.0, ep->bounds_color);
+
+          DrawCircleV(ep->pos, 2.0f, ep->bounds_color);
         }
 
-      } /* draw_entities */
+        if(gp->debug_flags & GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_HITBOXES) {
+          Vector2 pos = ep->pos;
+          for(int i = 0; i < ep->hitboxes.count; i++) {
+            Hitbox h = ep->hitboxes.d[i];
+
+            Rectangle rec =
+            {
+              pos.x + (float)h.min_x,
+              pos.y + (float)h.min_y,
+              (float)(h.max_x - h.min_x),
+              (float)(h.max_y - h.min_y),
+            };
+
+            DrawRectangleLinesEx(rec, 2.0, ep->hitbox_color);
+          }
+        }
+
+      } /* entity_draw */
     }
 
     for(int i = 0; i < MAX_PARTICLES; i++) {

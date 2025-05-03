@@ -38,6 +38,9 @@ b32 os_move_file(Str8 old_path, Str8 new_path);
 
 #elif defined(OS_WEB)
 
+#include <limits.h>
+#include <unistd.h>
+
 #define OS_PATH_LEN PATH_MAX
 
 #elif defined(OS_MAC)

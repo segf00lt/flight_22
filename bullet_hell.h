@@ -15,7 +15,7 @@
 
 
 /*
- * constants
+ * macro constants
  */
 
 #define TARGET_FPS 60
@@ -26,16 +26,10 @@
 
 #define WINDOW_RECT ((Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
 
-#define MAX_ENTITIES 2048
+#define MAX_ENTITIES 1024
 #define MAX_PARTICLES 512
 
 #define FRICTION ((float)40.0)
-
-#define PLAYER_INITIAL_OFFSCREEN_POS ((Vector2){ WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f })
-#define PLAYER_HEALTH 100
-#define PLAYER_BOUNDS_SIZE ((Vector2){ 50, 70 })
-#define PLAYER_SPRITE_SCALE ((float)1.0f)
-#define PLAYER_ACCEL ((float)1.6e4)
 
 
 /*
@@ -52,11 +46,12 @@
   //X(WAVE_TRANSITION)            \
   //X(SPAWN_ENEMIES)              \
 
-#define GAME_DEBUG_FLAGS     \
-  X(DEBUG_UI)                \
-  X(HOT_RELOAD)              \
-  X(PLAYER_INVINCIBLE)       \
-  X(DRAW_ALL_ENTITY_BOUNDS)  \
+#define GAME_DEBUG_FLAGS       \
+  X(DEBUG_UI)                  \
+  X(HOT_RELOAD)                \
+  X(PLAYER_INVINCIBLE)         \
+  X(DRAW_ALL_ENTITY_BOUNDS)    \
+  X(DRAW_ALL_ENTITY_HITBOXES)  \
   //X(SANDBOX_LOADED)          \
 
 #define GAME_FLAGS      \
@@ -74,7 +69,13 @@
 
 #define ENTITY_KINDS           \
   X(PLAYER)                    \
+  X(FORMATION)                 \
   X(BULLET)                    \
+  X(CRAB)                      \
+  X(FISH)                      \
+  X(STINGRAY)                  \
+  X(PARROT)                    \
+  X(BOSS)                      \
 
 #define ENTITY_ORDERS   \
   X(FIRST)              \
@@ -82,32 +83,44 @@
 
 #define ENTITY_FLAGS                 \
   X(DYNAMICS)                        \
+  X(DYNAMICS_HAS_CURVE)              \
   X(HAS_SPRITE)                      \
   X(APPLY_FRICTION)                  \
   X(CLAMP_POS_TO_SCREEN)             \
   X(FILL_BOUNDS)                     \
   X(HAS_BULLET_EMITTER)              \
   X(DIE_IF_OFFSCREEN)                \
-  //X(APPLY_COLLISION)                 \
-  //X(RECEIVE_COLLISION)               \
-  //X(DIE_ON_APPLY_COLLISION)          \
+  X(APPLY_COLLISION)                 \
+  X(RECEIVE_COLLISION)               \
+  X(APPLY_COLLISION_DAMAGE)          \
+  X(RECEIVE_COLLISION_DAMAGE)        \
+  X(DIE_ON_APPLY_COLLISION)          \
+  X(HAS_PARTICLE_EMITTER)            \
+  X(DAMAGE_BLINK_TINT)               \
   //X(DIE_IF_ABOVE_SCREEN)             \
   //X(DIE_IF_BELOW_SCREEN)             \
   //X(HAS_SHIELDS)                     \
-  //X(HAS_MISSILE_LAUNCHER)            \
-  //X(HAS_PARTICLE_EMITTER)            \
   //X(DEATH_PARTICLES)                 \
   //X(DEATH_SOUND)                     \
-  //X(MOVING)                          \
-  //X(APPLY_COLLISION_DAMAGE)          \
-  //X(RECEIVE_COLLISION_DAMAGE)        \
   //X(BLINK_TEXT)                      \
   //X(DRAW_TEXT)                       \
-  //X(USE_DAMAGE_BLINK_TINT)           \
 
-#define ENTITY_CONTROLS            \
-  X(PLAYER)                        \
-  X(AVENGER_BULLET)                \
+#define ENTITY_CONTROLS          \
+  X(PLAYER)                      \
+  X(CRAB_FORMATION_ENTER)        \
+  X(CRAB_ENTER)                  \
+  X(CRAB)                        \
+  X(FISH_FORMATION_ENTER)        \
+  X(FISH_ENTER)                  \
+  X(FISH)                        \
+  X(STINGRAY_FORMATION_ENTER)    \
+  X(STINGRAY_ENTER)              \
+  X(STINGRAY)                    \
+  X(BOSS_ENTER)                  \
+  X(AVENGER_BULLET)              \
+  X(CRAB_BULLET)                 \
+  X(FISH_BULLET)                 \
+  X(STINGRAY_BULLET)             \
 
 #define PARTICLE_FLAGS            \
   X(HAS_SPRITE)                   \
@@ -115,9 +128,22 @@
   X(MULTIPLE_ANIM_CYCLES)         \
 
 #define BULLET_EMITTER_KINDS         \
+  X(TRIPLE_THREAT)                   \
   X(AVENGER)                         \
+  X(CRAB)                            \
+  X(FISH)                            \
+  X(STINGRAY)                        \
+  X(BOSS)                            \
 
 #define BULLET_EMITTER_FLAGS         \
+
+
+/*
+ * macros
+ */
+
+#define entity_kind_in_mask(kind, mask) (!!(mask & (1ull<<kind)))
+#define frame_arr_init(array) arr_init((array), gp->frame_scratch)
 
 
 /*
@@ -130,6 +156,7 @@ typedef Entity* Entity_ptr;
 typedef struct Particle_emitter Particle_emitter;
 typedef struct Particle Particle;
 typedef struct Bullet_emitter Bullet_emitter;
+typedef struct Hitbox Hitbox;
 typedef u64 Game_flags;
 typedef u64 Game_debug_flags;
 typedef u64 Bullet_emitter_kind_mask;
@@ -284,6 +311,9 @@ BULLET_EMITTER_FLAGS
 
 DECL_ARR_TYPE(Entity_ptr);
 DECL_SLICE_TYPE(Entity_ptr);
+DECL_SLICE_TYPE(Hitbox);
+DECL_ARR_TYPE(Rectangle);
+DECL_SLICE_TYPE(Rectangle);
 
 
 /*
@@ -314,29 +344,18 @@ struct Bullet_emitter {
   Bullet_emitter_kind  kind;
   Bullet_emitter_flags flags;
 
-  Entity_flags bullet_entity_flags;
+  float spin_cur_angle;
 
-  Vector2 initial_pos;
-  Vector2 spawn_offset;
-  Vector2 initial_vel;
-  Vector2 bullet_size;
-
-  Color   bullet_color;
-
-  Sprite sprite;
-  Color  sprite_tint;
-  float  sprite_scale;
-
-  Sound  *bullet_sound;
-
-  Entity_kind_mask collision_mask;
-  int              damage_amount;
-
-  Particle_emitter particle_emitter;
-
-  u32     shooting;
+  b32     shooting;
   float   cooldown_period;
   float   cooldown_timer;
+};
+
+struct Hitbox {
+  s16 min_x;
+  s16 min_y;
+  s16 max_x;
+  s16 max_y;
 };
 
 struct Entity {
@@ -356,15 +375,24 @@ struct Entity {
   Vector2 vel;
   Vector2 pos;
   Vector2 half_size;
+  float   curve;
+
+  Slice__Hitbox hitboxes;
 
   Color bounds_color;
+  Color hitbox_color;
+  Color fill_color;
 
   Bullet_emitter bullet_emitter;
 
   Entity_kind_mask apply_collision_mask;
-  Entity_kind_mask receive_collision_mask;
 
-  u32 health;
+  b32 received_collision;
+  s32 received_damage;
+
+  s32 damage_amount;
+
+  s32 health;
 
   Sprite sprite;
   float sprite_scale;
@@ -419,14 +447,75 @@ void  game_reset(Game *gp);
 
 Entity* entity_spawn(Game *gp);
 void    entity_die(Game *gp, Entity *ep);
-Entity* entity_spawn_player(Game *gp);
 
-Slice(Entity_ptr) entity_emit_bullets(Game *gp, Entity *ep);
+Entity* entity_spawn_player(Game *gp);
+Entity* entity_spawn_crab(Game *gp);
+Entity* entity_spawn_fish(Game *gp);
+Entity* entity_spawn_stingray(Game *gp);
+
+void entity_emit_bullets(Game *gp, Entity *ep);
+b32  entity_check_hitbox_collision(Game *gp, Entity *a, Entity *b);
 
 void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint);
 void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint);
 void sprite_update(Game *gp, Sprite *sp);
 Sprite_frame sprite_current_frame(Sprite sp);
 b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
+
+
+/*
+ * entity settings
+ */
+
+const Vector2 PLAYER_INITIAL_OFFSCREEN_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f };
+const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f };
+const s32 PLAYER_HEALTH = 100;
+const Vector2 PLAYER_BOUNDS_SIZE = { 96, 96 };
+const float PLAYER_SPRITE_SCALE = 1.0f;
+const float PLAYER_ACCEL = 1.6e4;
+const float PLAYER_SLOW_FACTOR = 1.5e-1;
+const Color PLAYER_BOUNDS_COLOR = { 255, 0, 0, 150 };
+const Color PLAYER_HITBOX_COLOR = { 255, 0, 0, 255 };
+const Hitbox PLAYER_HITBOXES[] = {
+  { -50, -20, 50, 20 },
+  { -8, -40, 8, 48 },
+};
+const Entity_kind_mask PLAYER_APPLY_COLLISION_MASK =
+ENTITY_KIND_MASK_CRAB     |
+ENTITY_KIND_MASK_FISH     |
+ENTITY_KIND_MASK_STINGRAY |
+0;
+
+const Entity_flags DEFAULT_BULLET_FLAGS =
+ENTITY_FLAG_APPLY_COLLISION |
+ENTITY_FLAG_APPLY_COLLISION_DAMAGE |
+ENTITY_FLAG_DIE_IF_OFFSCREEN |
+ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
+ENTITY_FLAG_DYNAMICS |
+0;
+
+//const float AVENGER_NORMAL_BULLET_VELOCITY = 1400;
+const Vector2 AVENGER_NORMAL_BULLET_BOUNDS_SIZE = { 6, 12 };
+//const Vector2 AVENGER_NORMAL_BULLET_SPAWN_OFFSET = { 0, -PLAYER_BOUNDS_SIZE.y * 0.6f - AVENGER_NORMAL_BULLET_BOUNDS_SIZE.y };
+const Hitbox AVENGER_NORMAL_BULLET_HITBOXES[] = { { -3, -6, 3, 6 } };
+const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.05f;
+const s32 AVENGER_NORMAL_BULLET_DAMAGE = 5;
+
+const Vector2 CRAB_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.2f };
+const s32 CRAB_HEALTH = 15;
+const Vector2 CRAB_BOUNDS_SIZE = { 80, 70 };
+//const float CRAB_SPRITE_SCALE;
+//const float CRAB_SPRITE_TINT;
+const float CRAB_ACCEL = 5.5e3;
+const Color CRAB_BOUNDS_COLOR = { 0, 228, 48, 150 };
+const Color CRAB_HITBOX_COLOR = { 0, 228, 48, 255 };
+const Hitbox CRAB_HITBOXES[] = {
+  { -36, -30, 36, 30 },
+};
+const Entity_kind_mask CRAB_APPLY_COLLISION_MASK =
+ENTITY_KIND_MASK_PLAYER |
+0;
+
+const float CRAB_FIRE_COOLDOWN = 0.09f;
 
 #endif

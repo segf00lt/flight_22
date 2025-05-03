@@ -1,46 +1,29 @@
 #include <emscripten/emscripten.h>
 
 
-#include "invaders.h"
+#include "bullet_hell.h"
 
 
-#include "invaders.c"
+#include "bullet_hell.c"
 
 
 
 void load_assets(Game *gp) {
-  gp->font = GetFontDefault();
 
-  Image background_image = LoadImage("./sprites/nightsky.png");
-  ImageResizeNN(&background_image, background_image.width*BACKGROUND_SCALE, background_image.height*BACKGROUND_SCALE);
-  gp->background_texture = LoadTextureFromImage(background_image);
+  gp->font = GetFontDefault();
 
   gp->sprite_atlas = LoadTexture("./aseprite/atlas.png");
 
-  gp->player_missile_sound = LoadSound("./sounds/missile_sound.wav");
-  gp->invader_missile_sound = LoadSound("./sounds/invader_missile.wav");
-  gp->invader_die_sound = LoadSound("./sounds/invader_damage.wav");
-  gp->player_damage_sound = LoadSound("./sounds/player_damage.wav");
-  gp->player_die_sound = LoadSound("./sounds/player_die.wav");
-  gp->wave_banner_sound = LoadSound("./sounds/wave_banner.wav");
-  gp->hyperspace_jump_sound = LoadSound("./sounds/hyperspace_jump.wav");
-
   gp->render_texture = LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT);
+
 }
 
 void unload_assets(Game *gp) {
+
   UnloadRenderTexture(gp->render_texture);
 
-  UnloadTexture(gp->background_texture);
   UnloadTexture(gp->sprite_atlas);
 
-  UnloadSound(gp->player_missile_sound);
-  UnloadSound(gp->invader_missile_sound);
-  UnloadSound(gp->invader_die_sound);
-  UnloadSound(gp->player_damage_sound);
-  UnloadSound(gp->player_die_sound);
-  UnloadSound(gp->wave_banner_sound);
-  UnloadSound(gp->hyperspace_jump_sound);
 }
 
 void wasm_main_loop(void *gp) {
@@ -49,7 +32,7 @@ void wasm_main_loop(void *gp) {
 
 int main(void) {
   SetConfigFlags(FLAG_WINDOW_RESIZABLE);
-  InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "invaders");
+  InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Flight 22");
   InitAudioDevice();
 
   SetTargetFPS(TARGET_FPS);
@@ -64,7 +47,6 @@ int main(void) {
     memset(gp, 0, sizeof(Game));
 
     gp->state = GAME_STATE_NONE;
-    gp->background_scroll_speed = BACKGROUND_SCROLL_SPEED;
     gp->frame_scratch = arena_alloc();
 
     load_assets(gp);

@@ -40,10 +40,10 @@ int main(void) {
 
   //context_init();
 
-  Game *gp = MemAlloc(sizeof(Game));
+  Game *gp = os_alloc(sizeof(Game));
 
   { /* init game */
-    memset(gp, 0, sizeof(Game));
+    memory_set(gp, 0, sizeof(Game));
 
     gp->state = GAME_STATE_NONE;
     gp->frame_scratch = arena_alloc();
