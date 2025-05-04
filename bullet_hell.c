@@ -76,16 +76,11 @@ Entity* entity_spawn_player(Game *gp) {
   ep->bullet_emitter.kind = BULLET_EMITTER_KIND_AVENGER;
   ep->bullet_emitter.flags =
     0;
-
   ep->bullet_emitter.cooldown_period = AVENGER_NORMAL_FIRE_COOLDOWN;
 
   ep->bounds_color = PLAYER_BOUNDS_COLOR;
-  ep->hitbox_color = PLAYER_HITBOX_COLOR;
 
-  ep->half_size =
-    Vector2Scale(PLAYER_BOUNDS_SIZE, 0.5);
-
-  ep->hitboxes = carray_to_slice(Hitbox, PLAYER_HITBOXES);
+  ep->radius = PLAYER_BOUNDS_RADIUS;
 
   return ep;
 }
@@ -126,12 +121,8 @@ Entity* entity_spawn_crab(Game *gp) {
 
   ep->fill_color = MAROON;
   ep->bounds_color = CRAB_BOUNDS_COLOR;
-  ep->hitbox_color = CRAB_HITBOX_COLOR;
 
-  ep->half_size =
-    Vector2Scale(CRAB_BOUNDS_SIZE, 0.5);
-
-  ep->hitboxes = carray_to_slice(Hitbox, CRAB_HITBOXES);
+  ep->radius = CRAB_BOUNDS_RADIUS;
 
   return ep;
 }
@@ -154,46 +145,61 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
     case BULLET_EMITTER_KIND_AVENGER:
       {
 
+        // TODO parameterize bullet emitter
         const int N_ARMS = 3;
-        const float ANGLE_STEP = PI/20.0f;
-        const float INITIAL_ANGLE = -ANGLE_STEP;
+        const int BULLETS_PER_ARM = 2;
+        //const float INV_BULLETS_PER_ARM = 1.0f/(float)BULLETS_PER_ARM;
+        const float ARM_WIDTH = 30;
+        const float BULLET_STEP = ARM_WIDTH / (float)(BULLETS_PER_ARM-1);
+        const float ANGLE_STEP = (2*PI)/3.0f;
+        //const float INITIAL_ANGLE = -ANGLE_STEP;
+        const float INITIAL_ANGLE = 0;
         float angle = INITIAL_ANGLE + ep->bullet_emitter.spin_cur_angle;
 
         for(int i = 0; i < N_ARMS; i++) {
-
-          Entity *bullet = entity_spawn(gp);
-
-          bullet->kind = ENTITY_KIND_BULLET;
-          bullet->update_order = ENTITY_ORDER_FIRST;
-          bullet->draw_order = ENTITY_ORDER_LAST;
-          bullet->control = ENTITY_CONTROL_AVENGER_BULLET;
-
-          bullet->flags =
-            DEFAULT_BULLET_FLAGS |
-            ENTITY_FLAG_FILL_BOUNDS |
-            //ENTITY_FLAG_DYNAMICS_HAS_CURVE |
-            0;
-
-          bullet->bounds_color = RED;
-          bullet->fill_color = ORANGE;
-
-          //bullet->accel = AVENGER_NORMAL_BULLET_ACCEL;
-
           Vector2 dir = Vector2Rotate((Vector2){0,-1}, angle);
 
-          bullet->vel = Vector2Scale(dir, 1400);
-          bullet->curve = -0.04f;
-          bullet->pos = Vector2Add(ep->pos, Vector2Scale(dir, 55));
-          bullet->half_size = Vector2Scale(AVENGER_NORMAL_BULLET_BOUNDS_SIZE, 0.5f);
+          for(int j = 0; j < BULLETS_PER_ARM; j++) {
 
-          bullet->apply_collision_mask = PLAYER_APPLY_COLLISION_MASK;
-          bullet->damage_amount = AVENGER_NORMAL_BULLET_DAMAGE;
+            Entity *bullet = entity_spawn(gp);
 
-          bullet->hitboxes = carray_to_slice(Hitbox, AVENGER_NORMAL_BULLET_HITBOXES);
+            bullet->kind = ENTITY_KIND_BULLET;
+            bullet->update_order = ENTITY_ORDER_FIRST;
+            bullet->draw_order = ENTITY_ORDER_LAST;
+            bullet->control = ENTITY_CONTROL_AVENGER_BULLET;
 
+            bullet->flags =
+              DEFAULT_BULLET_FLAGS |
+              ENTITY_FLAG_FILL_BOUNDS |
+              //ENTITY_FLAG_DYNAMICS_HAS_CURVE |
+              0;
+
+            bullet->bounds_color = RED;
+            bullet->fill_color = ORANGE;
+
+            //bullet->accel = AVENGER_NORMAL_BULLET_ACCEL;
+
+            float arm_pos = ((float)j) * BULLET_STEP;
+            Vector2 dir_perp = { -dir.y, dir.x };
+            Vector2 arm_pos_dir = Vector2Scale(dir_perp, arm_pos);
+            arm_pos_dir = Vector2Subtract(arm_pos_dir, Vector2Scale(dir_perp, 0.5*ARM_WIDTH));
+
+            bullet->vel = Vector2Scale(dir, 1000);
+            //bullet->curve = -0.08;
+            bullet->pos = Vector2Add(ep->pos, Vector2Scale(dir, 55));
+            bullet->pos = Vector2Add(bullet->pos, arm_pos_dir);
+            bullet->radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
+
+            bullet->apply_collision_mask = PLAYER_APPLY_COLLISION_MASK;
+            bullet->damage_amount = AVENGER_NORMAL_BULLET_DAMAGE;
+
+          }
+          
           angle += ANGLE_STEP;
 
         }
+
+        ep->bullet_emitter.spin_cur_angle += 0.9f;
 
       } break;
     case BULLET_EMITTER_KIND_CRAB:
@@ -233,50 +239,16 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
 
 }
 
-b32 entity_check_hitbox_collision(Game *gp, Entity *a, Entity *b) {
-  Arr(Rectangle) a_recs;
-  frame_arr_init(a_recs);
+force_inline b32 entity_check_collision(Game *gp, Entity *a, Entity *b) {
+  b32 result = 0;
 
-  for(int i = 0; i < a->hitboxes.count; i++) {
-    Hitbox h = a->hitboxes.d[i];
+  float sqr_min_dist = SQUARE(a->radius + b->radius);
 
-    Rectangle rec =
-    {
-      a->pos.x + (float)h.min_x,
-      a->pos.y + (float)h.min_y,
-      (float)(h.max_x - h.min_x),
-      (float)(h.max_y - h.min_y),
-    };
-
-    arr_push(a_recs, rec);
+  if(Vector2DistanceSqr(a->pos, b->pos) < sqr_min_dist) {
+    result = 1;
   }
 
-  Arr(Rectangle) b_recs;
-  frame_arr_init(b_recs);
-
-  for(int i = 0; i < b->hitboxes.count; i++) {
-    Hitbox h = b->hitboxes.d[i];
-
-    Rectangle rec =
-    {
-      b->pos.x + (float)h.min_x,
-      b->pos.y + (float)h.min_y,
-      (float)(h.max_x - h.min_x),
-      (float)(h.max_y - h.min_y),
-    };
-
-    arr_push(b_recs, rec);
-  }
-
-  for(int i = 0; i < a_recs.count; i++) {
-    for(int j = 0; j < b_recs.count; j++) {
-      if(CheckCollisionRecs(a_recs.d[i], b_recs.d[j])) {
-        return 1;
-      }
-    }
-  }
-
-  return 0;
+  return result;
 }
 
 void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
@@ -459,7 +431,6 @@ void game_update_and_draw(Game *gp) {
 
     if(IsKeyPressed(KEY_F10)) {
       gp->debug_flags ^= GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS;
-      gp->debug_flags ^= GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_HITBOXES;
     }
 
     if(IsKeyPressed(KEY_F7)) {
@@ -526,7 +497,7 @@ void game_update_and_draw(Game *gp) {
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
 
-      for(int i = 0; i < MAX_ENTITIES; i++)
+      for(int i = 0; i < gp->entities_allocated; i++)
       { /* update_entities */
 
         Entity *ep = &gp->entities[i];
@@ -643,9 +614,9 @@ void game_update_and_draw(Game *gp) {
           }
 
           if(ep->flags & ENTITY_FLAG_CLAMP_POS_TO_SCREEN) {
-            Vector2 pos_min = ep->half_size;
+            Vector2 pos_min = { ep->radius, ep->radius };
             Vector2 pos_max =
-              Vector2Subtract((Vector2){ WINDOW_WIDTH, WINDOW_HEIGHT }, ep->half_size);
+              Vector2Subtract((Vector2){ WINDOW_WIDTH, WINDOW_HEIGHT }, pos_min);
             ep->pos = Vector2Clamp(ep->pos, pos_min, pos_max);
           }
 
@@ -674,39 +645,22 @@ void game_update_and_draw(Game *gp) {
           }
 
           if(ep->flags & ENTITY_FLAG_APPLY_COLLISION) {
-            //Rectangle ep_rec =
-            //{
-            //  ep->pos.x - ep->half_size.x,
-            //  ep->pos.y - ep->half_size.y,
-            //  2 * ep->half_size.x,
-            //  2 * ep->half_size.y,
-            //};
 
-            for(int i = 0; i < MAX_ENTITIES; i++) {
+            for(int i = 0; i < gp->entities_allocated; i++) {
               Entity *colliding = &gp->entities[i];
 
               if(colliding->live) {
 
                 if(entity_kind_in_mask(colliding->kind, ep->apply_collision_mask)) {
-                  //Rectangle colliding_rec =
-                  //{
-                  //  colliding->pos.x - colliding->half_size.x,
-                  //  colliding->pos.y - colliding->half_size.y,
-                  //  2 * colliding->half_size.x,
-                  //  2 * colliding->half_size.y,
-                  //};
-
-                  //if(CheckCollisionRecs(ep_rec, colliding_rec)) {
-                  if(entity_check_hitbox_collision(gp, ep, colliding)) {
+                  if(entity_check_collision(gp, ep, colliding)) {
                     applied_collision = 1;
                     colliding->received_collision = 1;
 
                     if(ep->flags & ENTITY_FLAG_APPLY_COLLISION_DAMAGE) {
-                      colliding->received_damage = ep->damage_amount;
+                      colliding->received_damage += ep->damage_amount;
                     }
 
                   }
-                  //}
 
                 }
 
@@ -715,18 +669,6 @@ void game_update_and_draw(Game *gp) {
             }
 
           }
-
-#if 0
-          if(ep->flags & ENTITY_FLAG_HAS_SHIELDS) {
-            if(ep->shields_time > SHIELDS_TIME) {
-              ep->shields_time = 0;
-              ep->flags &= ~ENTITY_FLAG_HAS_SHIELDS;
-            } else {
-              ep->shields_time += gp->timestep;
-              ep->received_damage = 0;
-            }
-          }
-#endif
 
           if(ep->flags & ENTITY_FLAG_DIE_ON_APPLY_COLLISION) {
             if(applied_collision) {
@@ -756,15 +698,7 @@ void game_update_and_draw(Game *gp) {
           }
 
           if(ep->flags & ENTITY_FLAG_DIE_IF_OFFSCREEN) {
-            Rectangle ep_rec =
-            {
-              .x = ep->pos.x - ep->half_size.x,
-              .y = ep->pos.y - ep->half_size.y,
-              .width = TIMES2(ep->half_size.x),
-              .height = TIMES2(ep->half_size.y),
-            };
-
-            if(!CheckCollisionRecs(WINDOW_RECT, ep_rec)) {
+            if(!CheckCollisionCircleRec(ep->pos, ep->radius, WINDOW_RECT)) {
               entity_die(gp, ep);
               goto entity_update_end;
             }
@@ -797,7 +731,7 @@ update_end:;
   { /* draw */
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
-      for(int i = 0; i < MAX_ENTITIES; i++)
+      for(int i = 0; i < gp->entities_allocated; i++)
       { /* entity_draw */
 
         Entity *ep = &gp->entities[i];
@@ -807,15 +741,7 @@ update_end:;
         if(ep->flags & ENTITY_FLAG_FILL_BOUNDS) {
           Color tint = ep->fill_color;
 
-          Rectangle rec =
-          {
-            ep->pos.x - ep->half_size.x,
-            ep->pos.y - ep->half_size.y,
-            2 * ep->half_size.x,
-            2 * ep->half_size.y,
-          };
-
-          DrawRectangleRec(rec, tint);
+          DrawCircleV(ep->pos, ep->radius, tint);
         }
 
         if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
@@ -824,34 +750,11 @@ update_end:;
         }
 
         if(gp->debug_flags & GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS) {
-          Rectangle rec =
-          {
-            ep->pos.x - ep->half_size.x,
-            ep->pos.y - ep->half_size.y,
-            2 * ep->half_size.x,
-            2 * ep->half_size.y,
-          };
-
-          DrawRectangleLinesEx(rec, 2.0, ep->bounds_color);
+          Color bounds_color = ep->bounds_color;
+          bounds_color.a = 255;
+          DrawCircleLinesV(ep->pos, ep->radius, bounds_color);
 
           DrawCircleV(ep->pos, 2.0f, ep->bounds_color);
-        }
-
-        if(gp->debug_flags & GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_HITBOXES) {
-          Vector2 pos = ep->pos;
-          for(int i = 0; i < ep->hitboxes.count; i++) {
-            Hitbox h = ep->hitboxes.d[i];
-
-            Rectangle rec =
-            {
-              pos.x + (float)h.min_x,
-              pos.y + (float)h.min_y,
-              (float)(h.max_x - h.min_x),
-              (float)(h.max_y - h.min_y),
-            };
-
-            DrawRectangleLinesEx(rec, 2.0, ep->hitbox_color);
-          }
         }
 
       } /* entity_draw */

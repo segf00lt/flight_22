@@ -8,11 +8,11 @@
 #include <string.h>
 #include <stdarg.h>
 
-#define SQUARE(x) (x*x)
-#define TIMES2(x) (x+x)
-#define HALF(x) (x*0.5f)
-#define IS_POW_2(x) ((x & (x-1)) == 0)
-#define SIGN_EXTEND_s64(x, n) (s64)((n >= 64) ? (s64)x : (s64)((s64)x | (s64)(-((s64)x >> ((s64)n - 1lu)) << (s64)n)))
+#define SQUARE(x) ((x)*(x))
+#define TIMES2(x) ((x)+(x))
+#define HALF(x) ((x)*0.5f)
+#define IS_POW_2(x) (((x) & ((x)-1)) == 0)
+#define SIGN_EXTEND_s64(x, n) (s64)(((n) >= 64) ? (s64)(x) : (s64)((s64)(x) | (s64)(-((s64)(x) >> ((s64)(n) - 1lu)) << (s64)(n))))
 #define MAX(a,b) (((a) > (b)) ? (a) : (b))
 #define MIN(a,b) (((a) < (b)) ? (a) : (b))
 #define CLAMP_BOT(a, b) MAX(a, b)
@@ -22,7 +22,7 @@
 #define GLUE_(a,b) a##b
 #define GLUE(a,b) GLUE_(a,b)
 #define DUNNO fprintf(stderr, "======\nDUNNO WHAT HAPPENS ON LINE %i IN %s()\n======\n", __LINE__, __func__)
-#define ALIGN_UP(x, align) ((x + align - 1) & ~(align - 1))
+#define ALIGN_UP(x, align) (((x) + (align) - 1) & ~((align) - 1))
 
 // TODO custom stb sprintf decorator
 //#if defined(stbsp_sprintf) && defined(stbsp_snprintf)

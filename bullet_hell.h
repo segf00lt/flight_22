@@ -26,8 +26,8 @@
 
 #define WINDOW_RECT ((Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
 
-#define MAX_ENTITIES 1024
-#define MAX_PARTICLES 512
+#define MAX_ENTITIES 4096
+#define MAX_PARTICLES 1024
 
 #define FRICTION ((float)40.0)
 
@@ -51,7 +51,6 @@
   X(HOT_RELOAD)                \
   X(PLAYER_INVINCIBLE)         \
   X(DRAW_ALL_ENTITY_BOUNDS)    \
-  X(DRAW_ALL_ENTITY_HITBOXES)  \
   //X(SANDBOX_LOADED)          \
 
 #define GAME_FLAGS      \
@@ -156,7 +155,6 @@ typedef Entity* Entity_ptr;
 typedef struct Particle_emitter Particle_emitter;
 typedef struct Particle Particle;
 typedef struct Bullet_emitter Bullet_emitter;
-typedef struct Hitbox Hitbox;
 typedef u64 Game_flags;
 typedef u64 Game_debug_flags;
 typedef u64 Bullet_emitter_kind_mask;
@@ -311,7 +309,6 @@ BULLET_EMITTER_FLAGS
 
 DECL_ARR_TYPE(Entity_ptr);
 DECL_SLICE_TYPE(Entity_ptr);
-DECL_SLICE_TYPE(Hitbox);
 DECL_ARR_TYPE(Rectangle);
 DECL_SLICE_TYPE(Rectangle);
 
@@ -351,13 +348,6 @@ struct Bullet_emitter {
   float   cooldown_timer;
 };
 
-struct Hitbox {
-  s16 min_x;
-  s16 min_y;
-  s16 max_x;
-  s16 max_y;
-};
-
 struct Entity {
   b32 live;
 
@@ -374,13 +364,10 @@ struct Entity {
   Vector2 accel;
   Vector2 vel;
   Vector2 pos;
-  Vector2 half_size;
+  float   radius;
   float   curve;
 
-  Slice__Hitbox hitboxes;
-
   Color bounds_color;
-  Color hitbox_color;
   Color fill_color;
 
   Bullet_emitter bullet_emitter;
@@ -454,7 +441,7 @@ Entity* entity_spawn_fish(Game *gp);
 Entity* entity_spawn_stingray(Game *gp);
 
 void entity_emit_bullets(Game *gp, Entity *ep);
-b32  entity_check_hitbox_collision(Game *gp, Entity *a, Entity *b);
+b32  entity_check_collision(Game *gp, Entity *a, Entity *b);
 
 void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint);
 void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint);
@@ -470,16 +457,11 @@ b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
 const Vector2 PLAYER_INITIAL_OFFSCREEN_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f };
 const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f };
 const s32 PLAYER_HEALTH = 100;
-const Vector2 PLAYER_BOUNDS_SIZE = { 96, 96 };
+const float PLAYER_BOUNDS_RADIUS = 40;
 const float PLAYER_SPRITE_SCALE = 1.0f;
 const float PLAYER_ACCEL = 1.6e4;
 const float PLAYER_SLOW_FACTOR = 1.5e-1;
 const Color PLAYER_BOUNDS_COLOR = { 255, 0, 0, 150 };
-const Color PLAYER_HITBOX_COLOR = { 255, 0, 0, 255 };
-const Hitbox PLAYER_HITBOXES[] = {
-  { -50, -20, 50, 20 },
-  { -8, -40, 8, 48 },
-};
 const Entity_kind_mask PLAYER_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_CRAB     |
 ENTITY_KIND_MASK_FISH     |
@@ -495,23 +477,18 @@ ENTITY_FLAG_DYNAMICS |
 0;
 
 //const float AVENGER_NORMAL_BULLET_VELOCITY = 1400;
-const Vector2 AVENGER_NORMAL_BULLET_BOUNDS_SIZE = { 6, 12 };
+const float AVENGER_NORMAL_BULLET_BOUNDS_RADIUS = 5;
 //const Vector2 AVENGER_NORMAL_BULLET_SPAWN_OFFSET = { 0, -PLAYER_BOUNDS_SIZE.y * 0.6f - AVENGER_NORMAL_BULLET_BOUNDS_SIZE.y };
-const Hitbox AVENGER_NORMAL_BULLET_HITBOXES[] = { { -3, -6, 3, 6 } };
 const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.05f;
 const s32 AVENGER_NORMAL_BULLET_DAMAGE = 5;
 
 const Vector2 CRAB_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.2f };
 const s32 CRAB_HEALTH = 15;
-const Vector2 CRAB_BOUNDS_SIZE = { 80, 70 };
+const float CRAB_BOUNDS_RADIUS = 50;
 //const float CRAB_SPRITE_SCALE;
 //const float CRAB_SPRITE_TINT;
 const float CRAB_ACCEL = 5.5e3;
 const Color CRAB_BOUNDS_COLOR = { 0, 228, 48, 150 };
-const Color CRAB_HITBOX_COLOR = { 0, 228, 48, 255 };
-const Hitbox CRAB_HITBOXES[] = {
-  { -36, -30, 36, 30 },
-};
 const Entity_kind_mask CRAB_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_PLAYER |
 0;

@@ -366,6 +366,7 @@ int main(int argc, char **argv) {
   //if(!build_raylib_static()) return 1;
   //if(!build_raylib_shared()) return 1;
   //if(!build_metaprogram()) return 1;
+  //if(!run_metaprogram()) return 1;
   //if(!build_release()) return 1;
   //if(!build_itch()) return 1;
   //if(!build_wasm()) return 1;
