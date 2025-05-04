@@ -65,6 +65,7 @@ Entity* entity_spawn_player(Game *gp) {
   ep->update_order = ENTITY_ORDER_LAST;
   ep->draw_order = ENTITY_ORDER_FIRST;
 
+  ep->look_dir = PLAYER_LOOK_DIR;
   ep->pos = PLAYER_INITIAL_OFFSCREEN_POS;
 
   ep->health = PLAYER_HEALTH;
@@ -138,6 +139,7 @@ Entity* entity_spawn_stingray(Game *gp) {
 }
 
 void entity_emit_bullets(Game *gp, Entity *ep) {
+  Bullet_emitter *emitter = &ep->bullet_emitter;
 
   switch(ep->bullet_emitter.kind) {
     default:
@@ -145,97 +147,130 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
     case BULLET_EMITTER_KIND_AVENGER:
       {
 
-        // TODO parameterize bullet emitter
-        const int N_ARMS = 3;
-        const int BULLETS_PER_ARM = 2;
-        //const float INV_BULLETS_PER_ARM = 1.0f/(float)BULLETS_PER_ARM;
-        const float ARM_WIDTH = 30;
-        const float BULLET_STEP = ARM_WIDTH / (float)(BULLETS_PER_ARM-1);
-        const float ANGLE_STEP = (2*PI)/3.0f;
-        //const float INITIAL_ANGLE = -ANGLE_STEP;
-        const float INITIAL_ANGLE = 0;
-        float angle = INITIAL_ANGLE + ep->bullet_emitter.spin_cur_angle;
+        emitter->bullet_collision_mask = PLAYER_APPLY_COLLISION_MASK;
+        emitter->n_rings = 1;
 
-        for(int i = 0; i < N_ARMS; i++) {
-          Vector2 dir = Vector2Rotate((Vector2){0,-1}, angle);
+        for(int i = 0; i < emitter->n_rings; i++) {
+          Bullet_emitter_ring *ring = &emitter->rings[i];
 
-          for(int j = 0; j < BULLETS_PER_ARM; j++) {
-
-            Entity *bullet = entity_spawn(gp);
-
-            bullet->kind = ENTITY_KIND_BULLET;
-            bullet->update_order = ENTITY_ORDER_FIRST;
-            bullet->draw_order = ENTITY_ORDER_LAST;
-            bullet->control = ENTITY_CONTROL_AVENGER_BULLET;
-
-            bullet->flags =
-              DEFAULT_BULLET_FLAGS |
-              ENTITY_FLAG_FILL_BOUNDS |
-              //ENTITY_FLAG_DYNAMICS_HAS_CURVE |
-              0;
-
-            bullet->bounds_color = RED;
-            bullet->fill_color = ORANGE;
-
-            //bullet->accel = AVENGER_NORMAL_BULLET_ACCEL;
-
-            float arm_pos = ((float)j) * BULLET_STEP;
-            Vector2 dir_perp = { -dir.y, dir.x };
-            Vector2 arm_pos_dir = Vector2Scale(dir_perp, arm_pos);
-            arm_pos_dir = Vector2Subtract(arm_pos_dir, Vector2Scale(dir_perp, 0.5*ARM_WIDTH));
-
-            bullet->vel = Vector2Scale(dir, 1000);
-            //bullet->curve = -0.08;
-            bullet->pos = Vector2Add(ep->pos, Vector2Scale(dir, 55));
-            bullet->pos = Vector2Add(bullet->pos, arm_pos_dir);
-            bullet->radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
-
-            bullet->apply_collision_mask = PLAYER_APPLY_COLLISION_MASK;
-            bullet->damage_amount = AVENGER_NORMAL_BULLET_DAMAGE;
-
-          }
-          
-          angle += ANGLE_STEP;
+          // TODO test more
+          ring->spin_vel = 0.3f;
+          ring->radius = 70.0f;
+          ring->n_arms = 2;
+          ring->arms_occupy_circle_sector_percent = 1.0f/2.0f;
+          ring->n_bullets = 6;
+          ring->bullet_arm_width = 60.0f;
+          ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
+          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
+          ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+          ring->bullet_bounds_color = GREEN;
+          ring->bullet_fill_color = ORANGE;
+          ring->bullet_flags =
+            ENTITY_FLAG_FILL_BOUNDS |
+            0;
 
         }
-
-        ep->bullet_emitter.spin_cur_angle += 0.9f;
 
       } break;
     case BULLET_EMITTER_KIND_CRAB:
       {
 
         UNIMPLEMENTED;
-#if !1
-        Entity *bullet = entity_spawn(gp);
-
-        bullet->kind = ENTITY_KIND_BULLET;
-        bullet->update_order = ENTITY_ORDER_FIRST;
-        bullet->draw_order = ENTITY_ORDER_LAST;
-        bullet->control = ENTITY_CONTROL_AVENGER_BULLET;
-
-        bullet->flags =
-          DEFAULT_BULLET_FLAGS |
-          ENTITY_FLAG_FILL_BOUNDS |
-          0;
-
-        bullet->bounds_color = RED;
-        bullet->fill_color = ORANGE;
-        bullet->vel = AVENGER_NORMAL_BULLET_VELOCITY;
-        bullet->pos = Vector2Add(ep->pos, AVENGER_NORMAL_BULLET_SPAWN_OFFSET);
-        bullet->half_size = Vector2Scale(AVENGER_NORMAL_BULLET_BOUNDS_SIZE, 0.5f);
-
-        bullet->apply_collision_mask = PLAYER_APPLY_COLLISION_MASK;
-        bullet->damage_amount = AVENGER_NORMAL_BULLET_DAMAGE;
-
-        bullet->hitboxes = carray_to_slice(Hitbox, AVENGER_NORMAL_BULLET_HITBOXES);
-#endif
 
       } break;
   }
 
   { /* flags checks */
   } /* flags checks */
+
+  {
+
+    ASSERT(ep->bullet_emitter.n_rings > 0);
+
+    for(int ring_i = 0; ring_i < ep->bullet_emitter.n_rings; ring_i++) {
+      Bullet_emitter_ring *ring = &ep->bullet_emitter.rings[ring_i];
+
+      ASSERT(ring->n_arms > 0);
+      ASSERT(ring->n_bullets > 0);
+
+      Vector2 arm_dir;
+      float arms_occupy_circle_sector_angle;
+      float arm_step_angle;
+
+      if(ring->n_arms == 1) {
+        arms_occupy_circle_sector_angle = 0;
+        arm_step_angle = 0;
+        arm_dir = Vector2Rotate(ep->look_dir, ring->spin_cur_angle);
+      } else {
+        ASSERT(ring->arms_occupy_circle_sector_percent > 0);
+
+        arms_occupy_circle_sector_angle =
+          (2*PI) * ring->arms_occupy_circle_sector_percent;
+        arm_step_angle = arms_occupy_circle_sector_angle / (float)(ring->n_arms-1);
+        arm_dir =
+          Vector2Rotate(
+              ep->look_dir,
+              -0.5*arms_occupy_circle_sector_angle + ring->spin_cur_angle);
+      }
+
+      for(int arm_i = 0; arm_i < ring->n_arms; arm_i++) {
+
+        Vector2 step_dir = {0};
+        Vector2 bullet_pos = Vector2Add(ep->pos, Vector2Scale(arm_dir, ring->radius));
+
+        if(ring->n_bullets > 1) {
+          ASSERT(ring->bullet_arm_width > 0);
+
+          Vector2 arm_dir_perp = { arm_dir.y, -arm_dir.x };
+
+          step_dir =
+            Vector2Scale(arm_dir_perp, ring->bullet_arm_width/(float)(ring->n_bullets-1));
+
+          bullet_pos =
+            Vector2Add(bullet_pos, Vector2Scale(arm_dir_perp, -0.5*ring->bullet_arm_width));
+        }
+
+        for(int bullet_i = 0; bullet_i < ring->n_bullets; bullet_i++) {
+          Entity *bullet = entity_spawn(gp);
+
+          bullet->kind = ENTITY_KIND_BULLET;
+          bullet->update_order = ENTITY_ORDER_FIRST;
+          bullet->draw_order = ENTITY_ORDER_LAST;
+          bullet->control = ENTITY_CONTROL_AVENGER_BULLET;
+
+          bullet->flags = DEFAULT_BULLET_FLAGS | ring->bullet_flags;
+
+          bullet->bounds_color = ring->bullet_bounds_color;
+          bullet->fill_color = ring->bullet_fill_color;
+
+          bullet->vel = Vector2Scale(arm_dir, ring->bullet_vel);
+          bullet->curve = ring->bullet_curve;
+          bullet->curve_rolloff_vel = ring->bullet_curve_rolloff_vel;
+
+          bullet->radius = ring->bullet_radius;
+
+          bullet->apply_collision_mask = ep->bullet_emitter.bullet_collision_mask;
+          bullet->damage_amount = ring->bullet_damage;
+
+          bullet->pos = bullet_pos;
+
+          bullet_pos = Vector2Add(bullet_pos, step_dir);
+
+        }
+
+        arm_dir = Vector2Rotate(arm_dir, arm_step_angle);
+
+      } /* for(int arm_i = 0; arm_i < ring->n_arms; arm_i++) */
+
+      ring->spin_cur_angle += ring->spin_vel;
+      if(ring->spin_cur_angle >= 2*PI) {
+        ring->spin_cur_angle = 0;
+      }
+
+
+    } /* for(int ring_i = 0; ring_i < ep->bullet_emitter.n_rings; ring_i++) */
+
+  }
 
 }
 

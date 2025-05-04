@@ -28,6 +28,7 @@
 
 #define MAX_ENTITIES 4096
 #define MAX_PARTICLES 1024
+#define MAX_BULLET_EMITTER_RINGS 4
 
 #define FRICTION ((float)40.0)
 
@@ -136,6 +137,8 @@
 
 #define BULLET_EMITTER_FLAGS         \
 
+#define BULLET_EMITTER_RING_FLAGS               \
+
 
 /*
  * macros
@@ -159,6 +162,8 @@ typedef u64 Game_flags;
 typedef u64 Game_debug_flags;
 typedef u64 Bullet_emitter_kind_mask;
 typedef u64 Bullet_emitter_flags;
+typedef struct Bullet_emitter_ring Bullet_emitter_ring;
+typedef u64 Bullet_emitter_ring_flags;
 typedef u64 Input_flags;
 typedef u64 Entity_flags;
 typedef u64 Entity_kind_mask;
@@ -306,6 +311,19 @@ STATIC_ASSERT(BULLET_EMITTER_FLAG_INDEX_MAX < 64, number_of_bullet_emitter_flags
 BULLET_EMITTER_FLAGS
 #undef X
 
+typedef enum Bullet_emitter_ring_flag_index {
+  BULLET_EMITTER_RING_FLAG_INDEX_INVALID = -1,
+#define X(flag) BULLET_EMITTER_RING_FLAG_INDEX_##flag,
+  BULLET_EMITTER_RING_FLAGS
+#undef X
+    BULLET_EMITTER_RING_FLAG_INDEX_MAX,
+} Bullet_emitter_ring_flag_index;
+
+STATIC_ASSERT(BULLET_EMITTER_RING_FLAG_INDEX_MAX < 64, number_of_bullet_emitter_ring_flags_is_less_than_64);
+
+#define X(flag) const Bullet_emitter_ring_flags BULLET_EMITTER_RING_FLAG_##flag = (Bullet_emitter_ring_flags)(1ull<<BULLET_EMITTER_RING_FLAG_INDEX_##flag);
+BULLET_EMITTER_RING_FLAGS
+#undef X
 
 DECL_ARR_TYPE(Entity_ptr);
 DECL_SLICE_TYPE(Entity_ptr);
@@ -337,11 +355,38 @@ struct Particle_emitter {
   Particle particle;
 };
 
-struct Bullet_emitter {
-  Bullet_emitter_kind  kind;
-  Bullet_emitter_flags flags;
+struct Bullet_emitter_ring {
+  Bullet_emitter_ring_flags flags;
+  Vector2 dir;
+  f32 initial_angle;
 
-  float spin_cur_angle;
+  f32 radius;
+  f32 spin_cur_angle;
+  f32 spin_vel;
+
+  s32 n_arms;
+  f32 arms_occupy_circle_sector_percent;
+
+  s32          n_bullets;
+  f32          bullet_arm_width;
+  f32          bullet_radius;
+  f32          bullet_vel;
+  f32          bullet_curve;
+  f32          bullet_curve_rolloff_vel;
+  s32          bullet_damage;
+  Color        bullet_bounds_color;
+  Color        bullet_fill_color;
+  Entity_flags bullet_flags;
+  Sprite bullet_sprite;
+};
+
+struct Bullet_emitter {
+  Bullet_emitter_flags flags;
+  Bullet_emitter_kind  kind;
+  Entity_kind_mask bullet_collision_mask;
+
+  s32 n_rings;
+  Bullet_emitter_ring rings[MAX_BULLET_EMITTER_RINGS];
 
   b32     shooting;
   float   cooldown_period;
@@ -361,11 +406,13 @@ struct Entity {
 
   u64 genid;
 
+  Vector2 look_dir;
   Vector2 accel;
   Vector2 vel;
   Vector2 pos;
-  float   radius;
-  float   curve;
+  f32     radius;
+  f32     curve;
+  f32     curve_rolloff_vel;
 
   Color bounds_color;
   Color fill_color;
@@ -456,6 +503,7 @@ b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
 
 const Vector2 PLAYER_INITIAL_OFFSCREEN_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f };
 const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f };
+const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
 const s32 PLAYER_HEALTH = 100;
 const float PLAYER_BOUNDS_RADIUS = 40;
 const float PLAYER_SPRITE_SCALE = 1.0f;
@@ -476,7 +524,7 @@ ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
 ENTITY_FLAG_DYNAMICS |
 0;
 
-//const float AVENGER_NORMAL_BULLET_VELOCITY = 1400;
+const float AVENGER_NORMAL_BULLET_VELOCITY = 1400;
 const float AVENGER_NORMAL_BULLET_BOUNDS_RADIUS = 5;
 //const Vector2 AVENGER_NORMAL_BULLET_SPAWN_OFFSET = { 0, -PLAYER_BOUNDS_SIZE.y * 0.6f - AVENGER_NORMAL_BULLET_BOUNDS_SIZE.y };
 const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.05f;
