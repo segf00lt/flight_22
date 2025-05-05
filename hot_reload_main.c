@@ -19,6 +19,7 @@ void load_assets(Game *gp) {
 
   gp->render_texture = LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT);
   gp->sprite_atlas = LoadTexture("./aseprite/atlas.png");
+  SetTextureFilter(gp->sprite_atlas, TEXTURE_FILTER_POINT);
 }
 
 void unload_assets(Game *gp) {
@@ -42,16 +43,18 @@ int main(void) {
 
   Game *gp = os_alloc(sizeof(Game));
 
-  { /* init game */
+  { /* TODO game_init() */
     memory_set(gp, 0, sizeof(Game));
 
     gp->state = GAME_STATE_NONE;
     gp->frame_scratch = arena_alloc();
+    gp->scratch = arena_alloc();
+    gp->entity_node_arena = arena_alloc();
 
     load_assets(gp);
 
     gp->debug_flags |= GAME_DEBUG_FLAG_HOT_RELOAD;
-  } /* init game */
+  } /* game_init() */
 
   void *game_module = dlopen(GAME_MODULE_PATH, RTLD_NOW);
   Game_update_and_draw_proc game_update_and_draw_proc = (Game_update_and_draw_proc)dlsym(game_module, "game_update_and_draw");

@@ -12,6 +12,7 @@
  * globals
  */
 
+Entity_handle cur_crab_leader_handle;
 
 
 /* 
@@ -19,6 +20,8 @@
  */
 
 #define frame_push_array(T, n) (T*)push_array(gp->frame_scratch, T, n)
+
+#define entity_is_part_of_list(ep) (ep->list_node && ep->list_node->ep == ep)
 
 Entity* entity_spawn(Game *gp) {
   Entity *ep = 0;
@@ -31,10 +34,13 @@ Entity* entity_spawn(Game *gp) {
     ep = &gp->entities[gp->entities_allocated++];
   }
 
+  gp->entity_uid++;
+
   *ep =
     (Entity){
       .live = 1,
-      .genid = gp->frame_index,
+      .uid = gp->entity_uid,
+      .list_id = -1,
     };
 
   return ep;
@@ -44,6 +50,102 @@ void entity_die(Game *gp, Entity *ep) {
   ep->free_list_next = gp->entity_free_list;
   gp->entity_free_list = ep;
   ep->live = 0;
+
+  if(entity_is_part_of_list(ep)) {
+    ASSERT(ep->list_id >= 0);
+    Entity_list *list = gp->entity_lists + ep->list_id;
+    list->count--;
+    dll_remove(list->first, list->last, ep->list_node);
+  }
+
+}
+
+force_inline Entity_list* push_entity_list(Game *gp) {
+  Entity_list *list = gp->entity_lists + gp->entity_lists_count++;
+  return list;
+}
+
+force_inline Entity_node* push_entity_list_node(Game *gp) {
+  Entity_node *e_node = push_array_no_zero(gp->entity_node_arena, Entity_node, 1);
+  return e_node;
+}
+
+Entity_list* get_entity_list_by_id(Game *gp, int list_id) {
+  Entity_list *list = 0;
+
+  ASSERT(list_id >= 0 && list_id < MAX_ENTITY_LISTS);
+
+  list = gp->entity_lists + list_id;
+
+  return list;
+}
+
+Entity_node* entity_list_append(Game *gp, Entity_list *list, Entity *ep) {
+  Entity_node *e_node = push_entity_list_node(gp);
+
+  e_node->uid = ep->uid;
+  e_node->ep = ep;
+
+  dll_push_back(list->first, list->last, e_node);
+  list->count++;
+
+  return e_node;
+}
+
+Entity_node* entity_list_push_front(Game *gp, Entity_list *list, Entity *ep) {
+  Entity_node *e_node = push_entity_list_node(gp);
+
+  e_node->uid = ep->uid;
+  e_node->ep = ep;
+
+  dll_push_front(list->first, list->last, e_node);
+  list->count++;
+
+  return e_node;
+}
+
+b32 entity_list_remove(Game *gp, Entity_list *list, Entity *ep) {
+  Entity_node *found = 0;
+
+  for(Entity_node *node = list->first; node; node = node->next) {
+    if(node->ep == ep) {
+      found = node;
+      break;
+    }
+  }
+
+  if(found) {
+    dll_remove(list->first, list->last, found);
+  }
+
+  list->count--;
+
+  return (b32)(!!found);
+}
+
+Entity* get_entity_by_uid(Game *gp, u64 uid) {
+  Entity *ep = 0;
+
+  for(int i = 0; i < gp->entities_allocated; i++) {
+    if(gp->entities[i].uid == uid) {
+      ep = gp->entities + i;
+      break;
+    }
+  }
+
+  return ep;
+}
+
+Entity* get_entity_by_handle(Entity_handle handle) {
+  ASSERT(handle.ep && handle.uid);
+
+  Entity *ep = 0;
+
+  if(handle.ep->uid == handle.uid) {
+    ep = handle.ep;
+  }
+
+  return ep;
 }
 
 Entity* entity_spawn_player(Game *gp) {
@@ -86,17 +188,40 @@ Entity* entity_spawn_player(Game *gp) {
   return ep;
 }
 
-Entity* entity_spawn_crab(Game *gp) {
+Entity* entity_spawn_crab_leader(Game *gp) {
   Entity *ep = entity_spawn(gp);
 
-  ep->control = ENTITY_CONTROL_CRAB;
-  ep->kind = ENTITY_KIND_CRAB;
+  ep->control = ENTITY_CONTROL_CRAB_LEADER;
+  ep->kind = ENTITY_KIND_LEADER;
 
   ep->flags =
     ENTITY_FLAG_DYNAMICS |
-    ENTITY_FLAG_APPLY_FRICTION |
-    //ENTITY_FLAG_HAS_SPRITE |
-    ENTITY_FLAG_FILL_BOUNDS |
+    0;
+
+  ep->update_order = ENTITY_ORDER_FIRST;
+  ep->draw_order = ENTITY_ORDER_LAST;
+
+  ep->pos = CRAB_LEADER_INITIAL_DEBUG_POS;
+
+  cur_crab_leader_handle = (Entity_handle){ .uid = ep->uid, .ep = ep };
+
+  ep->radius = 16.0f;
+  ep->bounds_color = GREEN;
+
+  return ep;
+}
+
+Entity* entity_spawn_crab(Game *gp) {
+  Entity *ep = entity_spawn(gp);
+
+  ep->control = ENTITY_CONTROL_CRAB_FOLLOW_CHAIN;
+  ep->kind = ENTITY_KIND_CRAB;
+
+  ep->flags =
+    //ENTITY_FLAG_DYNAMICS |
+    //ENTITY_FLAG_APPLY_FRICTION |
+    ENTITY_FLAG_HAS_SPRITE |
+    //ENTITY_FLAG_FILL_BOUNDS |
     //ENTITY_FLAG_CLAMP_POS_TO_SCREEN |
     ENTITY_FLAG_HAS_BULLET_EMITTER |
     ENTITY_FLAG_RECEIVE_COLLISION |
@@ -110,6 +235,10 @@ Entity* entity_spawn_crab(Game *gp) {
 
   ep->health = CRAB_HEALTH;
 
+  //ASSERT(cur_crab_leader_handle.uid && cur_crab_leader_handle.ep);
+
+  //ep->leader_handle = cur_crab_leader_handle;
+
   //ep->sprite = SPRITE_AVENGER;
   //ep->sprite_tint = WHITE;
   //ep->sprite_scale = PLAYER_SPRITE_SCALE;
@@ -120,8 +249,11 @@ Entity* entity_spawn_crab(Game *gp) {
 
   ep->bullet_emitter.cooldown_period = CRAB_FIRE_COOLDOWN;
 
-  ep->fill_color = MAROON;
+  //ep->fill_color = MAROON;
   ep->bounds_color = CRAB_BOUNDS_COLOR;
+  ep->sprite = SPRITE_CRAB;
+  ep->sprite_scale = CRAB_SPRITE_SCALE;
+  ep->sprite_tint = WHITE;
 
   ep->radius = CRAB_BOUNDS_RADIUS;
 
@@ -150,18 +282,17 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
         emitter->bullet_collision_mask = PLAYER_APPLY_COLLISION_MASK;
         emitter->n_rings = 1;
 
-        for(int i = 0; i < emitter->n_rings; i++) {
-          Bullet_emitter_ring *ring = &emitter->rings[i];
+        {
+          Bullet_emitter_ring *ring = &emitter->rings[0];
 
-          // TODO test more
-          ring->spin_vel = 0.3f;
-          ring->radius = 70.0f;
-          ring->n_arms = 2;
-          ring->arms_occupy_circle_sector_percent = 1.0f/2.0f;
-          ring->n_bullets = 6;
-          ring->bullet_arm_width = 60.0f;
+          ring->spin_vel = 0.0f;
+          ring->radius = 60.0f;
+          ring->n_arms = 1;
+          ring->arms_occupy_circle_sector_percent = 0;
+          ring->n_bullets = 1;
+          ring->bullet_arm_width = 0.0f;
           ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
-          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
+          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY*.5f;
           ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
           ring->bullet_bounds_color = GREEN;
           ring->bullet_fill_color = ORANGE;
@@ -170,6 +301,70 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
             0;
 
         }
+
+#if !1
+        {
+          Bullet_emitter_ring *ring = &emitter->rings[0];
+
+          ring->spin_vel = 0.1f;
+          ring->radius = 50.0f;
+          ring->n_arms = 1;
+          ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
+          ring->n_bullets = 3;
+          ring->bullet_arm_width = 50.0f;
+          ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
+          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY*.5f;
+          ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+          ring->bullet_bounds_color = GREEN;
+          ring->bullet_fill_color = ORANGE;
+          ring->bullet_flags =
+            ENTITY_FLAG_FILL_BOUNDS |
+            0;
+
+        }
+
+        {
+          Bullet_emitter_ring *ring = &emitter->rings[1];
+
+          //ring->spin_start_angle = (PI);
+          ring->spin_vel = 0.1f;
+          ring->radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS+70.0f;
+          ring->n_arms = 1;
+          ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
+          ring->n_bullets = 1;
+          ring->bullet_arm_width = 20.0f;
+          ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
+          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY*.5f;
+          ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+          ring->bullet_bounds_color = GREEN;
+          ring->bullet_fill_color = ORANGE;
+          ring->bullet_flags =
+            ENTITY_FLAG_FILL_BOUNDS |
+            0;
+
+        }
+
+        {
+          Bullet_emitter_ring *ring = &emitter->rings[2];
+
+          ring->spin_vel = 0.1f;
+          ring->radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS+100.0f;
+          ring->n_arms = 1;
+          ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
+          ring->n_bullets = 3;
+          ring->bullet_arm_width = 50.0f;
+          ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
+          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY*.5f;
+          ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+          ring->bullet_bounds_color = GREEN;
+          ring->bullet_fill_color = ORANGE;
+          ring->bullet_flags =
+            ENTITY_FLAG_FILL_BOUNDS |
+            0;
+
+        }
+
+#endif
 
       } break;
     case BULLET_EMITTER_KIND_CRAB:
@@ -186,6 +381,7 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
   {
 
     ASSERT(ep->bullet_emitter.n_rings > 0);
+    ASSERT(ep->bullet_emitter.n_rings <= MAX_BULLET_EMITTER_RINGS);
 
     for(int ring_i = 0; ring_i < ep->bullet_emitter.n_rings; ring_i++) {
       Bullet_emitter_ring *ring = &ep->bullet_emitter.rings[ring_i];
@@ -200,7 +396,7 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
       if(ring->n_arms == 1) {
         arms_occupy_circle_sector_angle = 0;
         arm_step_angle = 0;
-        arm_dir = Vector2Rotate(ep->look_dir, ring->spin_cur_angle);
+        arm_dir = Vector2Rotate(ep->look_dir, ring->spin_cur_angle + ring->spin_start_angle);
       } else {
         ASSERT(ring->arms_occupy_circle_sector_percent > 0);
 
@@ -210,7 +406,7 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
         arm_dir =
           Vector2Rotate(
               ep->look_dir,
-              -0.5*arms_occupy_circle_sector_angle + ring->spin_cur_angle);
+              -0.5*arms_occupy_circle_sector_angle + ring->spin_cur_angle + ring->spin_start_angle);
       }
 
       for(int arm_i = 0; arm_i < ring->n_arms; arm_i++) {
@@ -373,8 +569,8 @@ void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, C
 
   Rectangle dest_rec =
   {
-    .x = pos.x - scale*0.5f*source_rec.width,
-    .y = pos.y - scale*0.5f*source_rec.height,
+    .x = (pos.x - scale*0.5f*source_rec.width),
+    .y = (pos.y - scale*0.5f*source_rec.height),
     .width = scale*source_rec.width,
     .height = scale*source_rec.height,
   };
@@ -409,7 +605,12 @@ void game_reset(Game *gp) {
 
   gp->frame_index = 0;
 
+  arena_clear(gp->scratch);
   arena_clear(gp->frame_scratch);
+
+  arena_clear(gp->entity_node_arena);
+
+  cur_crab_leader_handle = (Entity_handle){0};
 
 }
 
@@ -442,9 +643,9 @@ void game_update_and_draw(Game *gp) {
       gp->input_flags |= INPUT_FLAG_SHOOT;
     }
 
-    if(IsKeyDown(KEY_LEFT_SHIFT)) {
-      gp->input_flags |= INPUT_FLAG_SLOW_MOVE;
-    }
+    //if(IsKeyDown(KEY_LEFT_SHIFT)) {
+    //  gp->input_flags |= INPUT_FLAG_SLOW_MOVE;
+    //}
 
     if(IsKeyPressed(KEY_ESCAPE)) {
       gp->input_flags |= INPUT_FLAG_PAUSE;
@@ -506,7 +707,31 @@ void game_update_and_draw(Game *gp) {
 
           gp->player = entity_spawn_player(gp);
 
-          entity_spawn_crab(gp);
+          Entity_list *list = push_entity_list(gp);
+
+          Vector2 crab_pos = { .x = WINDOW_WIDTH * 0.4f, .y = WINDOW_HEIGHT * 0.1f };
+
+          for(int i = 0; i < 5; i++) {
+            Entity *crab = entity_spawn_crab(gp);
+            crab->pos = crab_pos;
+            Entity_node *node = entity_list_push_front(gp, list, crab);
+            crab->list_id = list->id;
+            crab->list_node = node;
+
+            crab_pos.x -= 5;
+          }
+
+          Entity *leader_crab = entity_spawn_crab_leader(gp);
+          leader_crab->pos = (Vector2){ .x =  WINDOW_WIDTH * 0.5f, .y = WINDOW_HEIGHT * 0.1f };
+          leader_crab->flags |=
+            ENTITY_FLAG_DYNAMICS |
+            ENTITY_FLAG_DYNAMICS_HAS_CURVE |
+            0;
+          leader_crab->radius = CRAB_BOUNDS_RADIUS;
+          leader_crab->vel = (Vector2){ .x = 300, .y = 0 };
+          leader_crab->curve = 0.015f;
+          entity_list_append(gp, list, leader_crab);
+
 
           goto update_end;
 
@@ -523,9 +748,11 @@ void game_update_and_draw(Game *gp) {
       case GAME_STATE_GAME_OVER:
         {
         } break;
+#ifdef DEBUG
       case GAME_STATE_DEBUG_SANDBOX:
         {
         } break;
+#endif
     }
 
     gp->live_entities = 0;
@@ -547,13 +774,6 @@ void game_update_and_draw(Game *gp) {
           switch(ep->control) {
             default:
               UNREACHABLE;
-            case ENTITY_CONTROL_AVENGER_BULLET:
-              {
-
-              } break;
-            case ENTITY_CONTROL_CRAB:
-              {
-              } break;
             case ENTITY_CONTROL_PLAYER:
               {
 
@@ -627,6 +847,62 @@ void game_update_and_draw(Game *gp) {
                 if(gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) {
                   ep->received_damage = 0;
                 }
+
+              } break;
+            case ENTITY_CONTROL_AVENGER_BULLET:
+              {
+              } break;
+            case ENTITY_CONTROL_CRAB_LEADER:
+              {
+              } break;
+            case ENTITY_CONTROL_CRAB_FOLLOW_CHAIN:
+              {
+
+                ASSERT(ep->list_id >= 0);
+
+                Entity_node *next_node_in_chain = ep->list_node->next;
+                ASSERT(next_node_in_chain);
+
+                Entity *leader = get_entity_by_handle(next_node_in_chain->handle);
+                float ideal_dist = leader->radius + 20.0f;
+
+                Vector2 delta = Vector2Subtract(leader->pos, ep->pos);
+                float dist = Vector2Length(delta);
+                if(dist >= 0.0001f) {
+                  Vector2 dir = Vector2Scale(delta, 1.0f/dist);
+                  Vector2 ideal_pos = Vector2Subtract(leader->pos, Vector2Scale(dir, ideal_dist));
+                  float snap_speed = 4.0f * gp->timestep;
+                  ep->pos = Vector2Lerp(ep->pos, ideal_pos, snap_speed);
+                }
+                //if(dist >= leader->radius + 200) {
+                //  float inv_dist = 1/dist;
+                //  ep->vel = Vector2Scale(Vector2Scale(delta, inv_dist), CRAB_FOLLOW_LEADER_SPEED);
+                //} else {
+                //  ep->vel = (Vector2){0};
+                //}
+
+
+              } break;
+            case ENTITY_CONTROL_CRAB_FOLLOW_LEADER:
+              {
+
+#if 0
+                Entity *leader = get_entity_by_handle(ep->leader_handle);
+                ASSERT(leader);
+
+                Vector2 dir_to_leader = Vector2Subtract(leader->pos, ep->pos);
+
+                float dir_len = Vector2Length(dir_to_leader);
+
+                if(dir_len < 10.0f) {
+                  ep->pos = leader->pos;
+                  ep->vel = (Vector2){0};
+                } else {
+                  dir_to_leader = Vector2Scale(dir_to_leader, 1.0f/dir_len);
+                  ep->vel = Vector2Scale(dir_to_leader, CRAB_FOLLOW_LEADER_SPEED);
+                }
+#endif
+
 
               } break;
           }
@@ -762,8 +1038,9 @@ entity_update_end:;
 update_end:;
   } /* update */
 
-  defer_loop((BeginTextureMode(gp->render_texture), ClearBackground(DARKBLUE)), EndTextureMode())
+  defer_loop(BeginTextureMode(gp->render_texture), EndTextureMode())
   { /* draw */
+    ClearBackground(SKYBLUE);
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
       for(int i = 0; i < gp->entities_allocated; i++)
@@ -786,10 +1063,10 @@ update_end:;
 
         if(gp->debug_flags & GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS) {
           Color bounds_color = ep->bounds_color;
-          bounds_color.a = 255;
-          DrawCircleLinesV(ep->pos, ep->radius, bounds_color);
+          bounds_color.a = 150;
+          DrawCircleLinesV(ep->pos, ep->radius, ep->bounds_color);
 
-          DrawCircleV(ep->pos, 2.0f, ep->bounds_color);
+          DrawCircleV(ep->pos, 4.0f, bounds_color);
         }
 
       } /* entity_draw */
@@ -814,7 +1091,7 @@ update_end:;
 
     ClearBackground(BLACK);
 
-    float scale = fminf((float)GetScreenWidth() / WINDOW_WIDTH,
+    int scale = (int)fminf((float)GetScreenWidth() / WINDOW_WIDTH,
         (float)GetScreenHeight() / WINDOW_HEIGHT);
     int offset_x = (GetScreenWidth() - (int)(WINDOW_WIDTH * scale)) >> 1;
     int offset_y = (GetScreenHeight() - (int)(WINDOW_HEIGHT * scale)) >> 1;

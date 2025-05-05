@@ -100,6 +100,8 @@ Arena* arena_alloc_(Arena_params *params) {
 }
 
 void arena_free(Arena *arena) {
+  ASSERT(arena);
+
   if(arena->has_backing_buffer) return;
 
   for(Arena *a = arena->free_last, *prev = 0; a != 0; a = prev) {
@@ -115,6 +117,8 @@ void arena_free(Arena *arena) {
 }
 
 void *arena_push(Arena *arena, u64 size, u64 align) {
+  ASSERT(arena);
+
   Arena *cur = arena->cur;
   u64 pos = ALIGN_UP(cur->pos, align);
   u64 new_pos = pos + size;
@@ -165,12 +169,16 @@ void *arena_push(Arena *arena, u64 size, u64 align) {
 }
 
 u64 arena_pos(Arena *arena) {
+  ASSERT(arena);
+
   Arena *cur = arena->cur;
   u64 pos = cur->base_pos + cur->pos;
   return pos;
 }
 
 void arena_pop_to(Arena *arena, u64 pos) {
+  ASSERT(arena);
+
   u64 big_pos = CLAMP_BOT(JLIB_ARENA_HEADER_SIZE, pos);
   Arena *cur = arena->cur;
 

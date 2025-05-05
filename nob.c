@@ -194,10 +194,6 @@ int run_metaprogram(void) {
 }
 
 int build_hot_reload(void) {
-  run_metaprogram();
-
-  run_tags();
-
   Nob_Cmd cmd = {0};
 
   nob_log(NOB_INFO, "building in hot reload mode");
@@ -212,10 +208,6 @@ int build_hot_reload(void) {
 }
 
 int build_static(void) {
-  run_metaprogram();
-
-  run_tags();
-
   Nob_Cmd cmd = {0};
 
   nob_log(NOB_INFO, "building in static mode");
@@ -227,10 +219,6 @@ int build_static(void) {
 }
 
 int build_release(void) {
-  run_metaprogram();
-
-  run_tags();
-
   Nob_Cmd cmd = {0};
 
   nob_log(NOB_INFO, "building in release mode");
@@ -242,9 +230,6 @@ int build_release(void) {
 }
 
 int build_wasm(void) {
-  run_metaprogram();
-  run_tags();
-
   Nob_Cmd cmd = {0};
 
   nob_log(NOB_INFO, "building for WASM");
@@ -260,9 +245,6 @@ int build_wasm(void) {
 }
 
 int build_itch(void) {
-  run_metaprogram();
-  run_tags();
-
   Nob_Cmd cmd = {0};
 
   nob_log(NOB_INFO, "building for WASM");
@@ -366,7 +348,10 @@ int main(int argc, char **argv) {
   //if(!build_raylib_static()) return 1;
   //if(!build_raylib_shared()) return 1;
   //if(!build_metaprogram()) return 1;
-  //if(!run_metaprogram()) return 1;
+
+  run_metaprogram();
+  run_tags();
+
   //if(!build_release()) return 1;
   //if(!build_itch()) return 1;
   //if(!build_wasm()) return 1;

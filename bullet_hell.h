@@ -29,6 +29,8 @@
 #define MAX_ENTITIES 4096
 #define MAX_PARTICLES 1024
 #define MAX_BULLET_EMITTER_RINGS 4
+#define MAX_LEADERS 32
+#define MAX_ENTITY_LISTS 16
 
 #define FRICTION ((float)40.0)
 
@@ -69,7 +71,7 @@
 
 #define ENTITY_KINDS           \
   X(PLAYER)                    \
-  X(FORMATION)                 \
+  X(LEADER)                    \
   X(BULLET)                    \
   X(CRAB)                      \
   X(FISH)                      \
@@ -107,20 +109,12 @@
 
 #define ENTITY_CONTROLS          \
   X(PLAYER)                      \
-  X(CRAB_FORMATION_ENTER)        \
-  X(CRAB_ENTER)                  \
+  X(CRAB_LEADER)                 \
+  X(CRAB_FOLLOW_CHAIN)           \
+  X(CRAB_FOLLOW_LEADER)          \
   X(CRAB)                        \
-  X(FISH_FORMATION_ENTER)        \
-  X(FISH_ENTER)                  \
-  X(FISH)                        \
-  X(STINGRAY_FORMATION_ENTER)    \
-  X(STINGRAY_ENTER)              \
-  X(STINGRAY)                    \
-  X(BOSS_ENTER)                  \
   X(AVENGER_BULLET)              \
   X(CRAB_BULLET)                 \
-  X(FISH_BULLET)                 \
-  X(STINGRAY_BULLET)             \
 
 #define PARTICLE_FLAGS            \
   X(HAS_SPRITE)                   \
@@ -168,6 +162,9 @@ typedef u64 Input_flags;
 typedef u64 Entity_flags;
 typedef u64 Entity_kind_mask;
 typedef u64 Particle_flags;
+typedef struct Entity_handle Entity_handle;
+typedef struct Entity_node Entity_node;
+typedef struct Entity_list Entity_list;
 
 typedef enum Game_state {
 #define X(state) GAME_STATE_##state,
@@ -362,6 +359,7 @@ struct Bullet_emitter_ring {
 
   f32 radius;
   f32 spin_cur_angle;
+  f32 spin_start_angle;
   f32 spin_vel;
 
   s32 n_arms;
@@ -393,6 +391,30 @@ struct Bullet_emitter {
   float   cooldown_timer;
 };
 
+struct Entity_list {
+  Entity_node *first;
+  Entity_node *last;
+  s64 count;
+  s64 id;
+};
+
+struct Entity_handle {
+  u64     uid;
+  Entity *ep;
+};
+
+struct Entity_node {
+  Entity_node *next;
+  Entity_node *prev;
+  union {
+    Entity_handle handle;
+    struct {
+      u64     uid;
+      Entity *ep;
+    };
+  };
+};
+
 struct Entity {
   b32 live;
 
@@ -404,7 +426,12 @@ struct Entity {
 
   Entity *free_list_next;
 
-  u64 genid;
+  u64 uid;
+
+  Entity_handle leader_handle;
+
+  int          list_id;
+  Entity_node *list_node;
 
   Vector2 look_dir;
   Vector2 accel;
@@ -451,12 +478,18 @@ struct Game {
   Arena *scratch;
   Arena *frame_scratch;
 
+  Arena *entity_node_arena;
+
+  Entity_list entity_lists[MAX_ENTITY_LISTS];
+  u64 entity_lists_count;
+
   Font font;
 
   RenderTexture2D render_texture;
 
   Texture2D sprite_atlas;
 
+  u64 entity_uid;
   Entity entities[MAX_ENTITIES];
   u64 entities_allocated;
   Entity *entity_free_list;
@@ -482,10 +515,21 @@ void  game_reset(Game *gp);
 Entity* entity_spawn(Game *gp);
 void    entity_die(Game *gp, Entity *ep);
 
+Entity_list* push_entity_list(Game *gp);
+Entity_node* push_entity_list_node(Game *gp);
+Entity_list* get_entity_list_by_id(Game *gp, int list_id);
+Entity_node* entity_list_append(Game *gp, Entity_list *list, Entity *ep);
+Entity_node* entity_list_push_front(Game *gp, Entity_list *list, Entity *ep);
+b32          entity_list_remove(Game *gp, Entity_list *list, Entity *ep);
+
+Entity* get_entity_by_uid(Game *gp, u64 uid);
+Entity* get_entity_by_handle(Entity_handle handle);
+
 Entity* entity_spawn_player(Game *gp);
 Entity* entity_spawn_crab(Game *gp);
 Entity* entity_spawn_fish(Game *gp);
 Entity* entity_spawn_stingray(Game *gp);
+Entity* entity_spawn_crab_leader(Game *gp);
 
 void entity_emit_bullets(Game *gp, Entity *ep);
 b32  entity_check_collision(Game *gp, Entity *a, Entity *b);
@@ -506,10 +550,10 @@ const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT *
 const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
 const s32 PLAYER_HEALTH = 100;
 const float PLAYER_BOUNDS_RADIUS = 40;
-const float PLAYER_SPRITE_SCALE = 1.0f;
+const float PLAYER_SPRITE_SCALE = 2.0f;
 const float PLAYER_ACCEL = 1.6e4;
 const float PLAYER_SLOW_FACTOR = 1.5e-1;
-const Color PLAYER_BOUNDS_COLOR = { 255, 0, 0, 150 };
+const Color PLAYER_BOUNDS_COLOR = { 255, 0, 0, 255 };
 const Entity_kind_mask PLAYER_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_CRAB     |
 ENTITY_KIND_MASK_FISH     |
@@ -525,22 +569,24 @@ ENTITY_FLAG_DYNAMICS |
 0;
 
 const float AVENGER_NORMAL_BULLET_VELOCITY = 1400;
-const float AVENGER_NORMAL_BULLET_BOUNDS_RADIUS = 5;
+const float AVENGER_NORMAL_BULLET_BOUNDS_RADIUS = 10;
 //const Vector2 AVENGER_NORMAL_BULLET_SPAWN_OFFSET = { 0, -PLAYER_BOUNDS_SIZE.y * 0.6f - AVENGER_NORMAL_BULLET_BOUNDS_SIZE.y };
-const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.05f;
+const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.18f;
 const s32 AVENGER_NORMAL_BULLET_DAMAGE = 5;
 
+const Vector2 CRAB_LEADER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.2f, WINDOW_HEIGHT * 0.1f };
 const Vector2 CRAB_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.2f };
+const Vector2 CRAB_LOOK_DIR = { 0, 1 };
 const s32 CRAB_HEALTH = 15;
+const float CRAB_FOLLOW_LEADER_SPEED = 300;
 const float CRAB_BOUNDS_RADIUS = 50;
-//const float CRAB_SPRITE_SCALE;
-//const float CRAB_SPRITE_TINT;
+const float CRAB_SPRITE_SCALE = 2.0f;
+//const Color CRAB_SPRITE_TINT;
 const float CRAB_ACCEL = 5.5e3;
-const Color CRAB_BOUNDS_COLOR = { 0, 228, 48, 150 };
+const Color CRAB_BOUNDS_COLOR = { 0, 228, 48, 255 };
 const Entity_kind_mask CRAB_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_PLAYER |
 0;
-
 const float CRAB_FIRE_COOLDOWN = 0.09f;
 
 #endif
