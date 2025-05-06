@@ -23,6 +23,8 @@
 #define GLUE(a,b) GLUE_(a,b)
 #define DUNNO fprintf(stderr, "======\nDUNNO WHAT HAPPENS ON LINE %i IN %s()\n======\n", __LINE__, __func__)
 #define ALIGN_UP(x, align) (((x) + (align) - 1) & ~((align) - 1))
+#define STRINGIFY(x) #x
+#define GLSL(src) STRINGIFY(src)
 
 // TODO custom stb sprintf decorator
 //#if defined(stbsp_sprintf) && defined(stbsp_snprintf)

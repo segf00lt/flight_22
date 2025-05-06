@@ -12,7 +12,6 @@
  * globals
  */
 
-Entity_handle cur_crab_leader_handle;
 
 
 /* 
@@ -40,7 +39,6 @@ Entity* entity_spawn(Game *gp) {
     (Entity){
       .live = 1,
       .uid = gp->entity_uid,
-      .list_id = -1,
     };
 
   return ep;
@@ -52,8 +50,8 @@ void entity_die(Game *gp, Entity *ep) {
   ep->live = 0;
 
   if(entity_is_part_of_list(ep)) {
-    ASSERT(ep->list_id >= 0);
-    Entity_list *list = gp->entity_lists + ep->list_id;
+    ASSERT(ep->parent_list);
+    Entity_list *list = ep->parent_list;
     list->count--;
     dll_remove(list->first, list->last, ep->list_node);
   }
@@ -81,10 +79,15 @@ Entity_list* get_entity_list_by_id(Game *gp, int list_id) {
 }
 
 Entity_node* entity_list_append(Game *gp, Entity_list *list, Entity *ep) {
+  ASSERT(list);
+
   Entity_node *e_node = push_entity_list_node(gp);
 
   e_node->uid = ep->uid;
   e_node->ep = ep;
+
+  ep->parent_list = list;
+  ep->list_node = e_node;
 
   dll_push_back(list->first, list->last, e_node);
   list->count++;
@@ -93,6 +96,8 @@ Entity_node* entity_list_append(Game *gp, Entity_list *list, Entity *ep) {
 }
 
 Entity_node* entity_list_push_front(Game *gp, Entity_list *list, Entity *ep) {
+  ASSERT(list);
+
   Entity_node *e_node = push_entity_list_node(gp);
 
   e_node->uid = ep->uid;
@@ -105,6 +110,8 @@ Entity_node* entity_list_push_front(Game *gp, Entity_list *list, Entity *ep) {
 }
 
 b32 entity_list_remove(Game *gp, Entity_list *list, Entity *ep) {
+  ASSERT(list);
+
   Entity_node *found = 0;
 
   for(Entity_node *node = list->first; node; node = node->next) {
@@ -148,10 +155,14 @@ Entity* get_entity_by_handle(Entity_handle handle) {
   return ep;
 }
 
-Entity* entity_spawn_player(Game *gp) {
+Entity_handle handle_from_entity(Entity *ep) {
+  return (Entity_handle){ .uid = ep->uid, .ep = ep };
+}
+
+Entity* spawn_player(Game *gp) {
   Entity *ep = entity_spawn(gp);
 
-  ep->control = ENTITY_CONTROL_PLAYER;
+  ep->move_control = ENTITY_MOVE_CONTROL_PLAYER;
   ep->kind = ENTITY_KIND_PLAYER;
 
   ep->flags =
@@ -188,14 +199,15 @@ Entity* entity_spawn_player(Game *gp) {
   return ep;
 }
 
-Entity* entity_spawn_crab_leader(Game *gp) {
+Entity* spawn_crab_leader(Game *gp) {
   Entity *ep = entity_spawn(gp);
 
-  ep->control = ENTITY_CONTROL_CRAB_LEADER;
   ep->kind = ENTITY_KIND_LEADER;
 
   ep->flags =
     ENTITY_FLAG_DYNAMICS |
+    ENTITY_FLAG_NOT_ON_SCREEN |
+    ENTITY_FLAG_DIE_IF_CHILD_LIST_EMPTY |
     0;
 
   ep->update_order = ENTITY_ORDER_FIRST;
@@ -203,18 +215,58 @@ Entity* entity_spawn_crab_leader(Game *gp) {
 
   ep->pos = CRAB_LEADER_INITIAL_DEBUG_POS;
 
-  cur_crab_leader_handle = (Entity_handle){ .uid = ep->uid, .ep = ep };
-
   ep->radius = 16.0f;
   ep->bounds_color = GREEN;
 
   return ep;
 }
 
-Entity* entity_spawn_crab(Game *gp) {
+Entity* spawn_crab(Game *gp) {
   Entity *ep = entity_spawn(gp);
 
-  ep->control = ENTITY_CONTROL_CRAB_FOLLOW_CHAIN;
+  ep->kind = ENTITY_KIND_CRAB;
+
+  ep->flags =
+    ENTITY_FLAG_DYNAMICS |
+    //ENTITY_FLAG_APPLY_FRICTION |
+    ENTITY_FLAG_HAS_SPRITE |
+    //ENTITY_FLAG_FILL_BOUNDS |
+    ENTITY_FLAG_DIE_IF_EXIT_SCREEN |
+    ENTITY_FLAG_NOT_ON_SCREEN |
+    ENTITY_FLAG_HAS_BULLET_EMITTER |
+    ENTITY_FLAG_RECEIVE_COLLISION |
+    ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
+    0;
+
+  ep->update_order = ENTITY_ORDER_LAST;
+  ep->draw_order = ENTITY_ORDER_FIRST;
+
+  ep->look_dir = (Vector2){ 0, 1 };
+  ep->pos = CRAB_INITIAL_DEBUG_POS;
+
+  ep->health = CRAB_HEALTH;
+
+  ep->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB;
+  ep->bullet_emitter.flags =
+    0;
+
+  ep->bullet_emitter.cooldown_period = CRAB_FIRE_COOLDOWN;
+
+  ep->bounds_color = CRAB_BOUNDS_COLOR;
+  ep->sprite = SPRITE_CRAB;
+  ep->sprite_scale = CRAB_SPRITE_SCALE;
+  ep->sprite_tint = WHITE;
+
+  ep->radius = CRAB_BOUNDS_RADIUS;
+
+  return ep;
+}
+
+#if !1
+Entity* spawn_crab_follow(Game *gp) {
+  Entity *ep = entity_spawn(gp);
+
+  ep->move_control = ENTITY_MOVE_CONTROL_CRAB_FOLLOW_CHAIN;
   ep->kind = ENTITY_KIND_CRAB;
 
   ep->flags =
@@ -259,13 +311,14 @@ Entity* entity_spawn_crab(Game *gp) {
 
   return ep;
 }
+#endif
 
-Entity* entity_spawn_fish(Game *gp) {
+Entity* spawn_fish(Game *gp) {
   UNIMPLEMENTED;
   return 0;
 }
 
-Entity* entity_spawn_stingray(Game *gp) {
+Entity* spawn_stingray(Game *gp) {
   UNIMPLEMENTED;
   return 0;
 }
@@ -432,7 +485,6 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
           bullet->kind = ENTITY_KIND_BULLET;
           bullet->update_order = ENTITY_ORDER_FIRST;
           bullet->draw_order = ENTITY_ORDER_LAST;
-          bullet->control = ENTITY_CONTROL_AVENGER_BULLET;
 
           bullet->flags = DEFAULT_BULLET_FLAGS | ring->bullet_flags;
 
@@ -440,6 +492,9 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
           bullet->fill_color = ring->bullet_fill_color;
 
           bullet->vel = Vector2Scale(arm_dir, ring->bullet_vel);
+
+          bullet->vel = Vector2Add(bullet->vel, Vector2Scale(ep->look_dir, Vector2DotProduct(ep->look_dir, ep->vel)));
+
           bullet->curve = ring->bullet_curve;
           bullet->curve_rolloff_vel = ring->bullet_curve_rolloff_vel;
 
@@ -610,7 +665,261 @@ void game_reset(Game *gp) {
 
   arena_clear(gp->entity_node_arena);
 
-  cur_crab_leader_handle = (Entity_handle){0};
+  gp->entity_lists_count = 0;
+
+  gp->phase_started = 0;
+  gp->phase = 0;
+  gp->wave = 0;
+
+}
+
+void game_main_loop(Game *gp) {
+
+  switch(gp->wave) {
+    case 0:
+      switch(gp->phase) {
+        case 0:
+          {
+
+            if(gp->phase_started == 0) {
+              gp->phase_started = 1;
+
+              { /* init phase */
+
+                const int crabs_per_row = 2;
+
+                {
+                  Entity *leader = spawn_crab_leader(gp);
+                  Entity_handle leader_handle = handle_from_entity(leader);
+                  leader->child_list = push_entity_list(gp);
+                  leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
+                  leader->vel = (Vector2){ .x = CRAB_NORMAL_STRAFE_SPEED };
+                  leader->leader_strafe_padding = 100;
+                  leader->pos =
+                    (Vector2){
+                      .x = -400 + (0.5*(float)(crabs_per_row-1))*3.0*CRAB_BOUNDS_RADIUS,
+                      .y = WINDOW_HEIGHT * 0.13f,
+                    };
+
+                  for(int i = 0; i < crabs_per_row; i++) {
+                    Vector2 pos = 
+                    {
+                      -400 + i*3.0*CRAB_BOUNDS_RADIUS,
+                      WINDOW_HEIGHT * 0.13f,
+                    };
+
+                    Entity *crab = spawn_crab(gp);
+
+                    crab->pos = pos;
+                    crab->move_control = ENTITY_MOVE_CONTROL_COPY_LEADER;
+                    crab->leader_handle = leader_handle;
+                    entity_list_append(gp, leader->child_list, crab);
+
+                  }
+
+                }
+
+                {
+                  Entity *leader = spawn_crab_leader(gp);
+                  Entity_handle leader_handle = handle_from_entity(leader);
+                  leader->child_list = push_entity_list(gp);
+                  leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
+                  leader->vel = (Vector2){ .x = -CRAB_NORMAL_STRAFE_SPEED };
+                  leader->leader_strafe_padding = 100;
+                  leader->pos =
+                    (Vector2){
+                      .x = WINDOW_WIDTH+(400-2.5*CRAB_BOUNDS_RADIUS) + (0.5*(float)(crabs_per_row-1))*3.0*CRAB_BOUNDS_RADIUS,
+                      .y = WINDOW_HEIGHT * 0.26f,
+                    };
+
+                  for(int i = 0; i < crabs_per_row; i++) {
+                    Vector2 pos = 
+                    {
+                      WINDOW_WIDTH+(400-2.5*CRAB_BOUNDS_RADIUS) + i*3.0*CRAB_BOUNDS_RADIUS,
+                      WINDOW_HEIGHT * 0.26f,
+                    };
+
+                    Entity *crab = spawn_crab(gp);
+
+                    crab->pos = pos;
+                    crab->move_control = ENTITY_MOVE_CONTROL_COPY_LEADER;
+                    crab->leader_handle = leader_handle;
+                    entity_list_append(gp, leader->child_list, crab);
+
+                  }
+
+                }
+
+              } /* init phase */
+
+            } else {
+              if(gp->live_entities == 1) {
+                goto phase_end;
+              }
+            }
+
+          } break;
+        case 1:
+          {
+
+            if(gp->phase_started == 0) {
+              gp->phase_started = 1;
+
+              { /* init phase */
+
+                const int crabs_per_row = 2;
+
+                {
+                  Entity *leader = spawn_crab_leader(gp);
+                  Entity_handle leader_handle = handle_from_entity(leader);
+                  leader->child_list = push_entity_list(gp);
+                  leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
+                  leader->vel = (Vector2){ .x = CRAB_NORMAL_STRAFE_SPEED };
+                  leader->leader_strafe_padding = 100;
+                  leader->pos =
+                    (Vector2){
+                      .x = -400 + (0.5*(float)(crabs_per_row-1))*3.0*CRAB_BOUNDS_RADIUS,
+                      .y = WINDOW_HEIGHT * 0.26f,
+                    };
+
+                  for(int i = 0; i < crabs_per_row; i++) {
+                    Vector2 pos = 
+                    {
+                      -400 + i*3.0*CRAB_BOUNDS_RADIUS,
+                      WINDOW_HEIGHT * 0.26f,
+                    };
+
+                    Entity *crab = spawn_crab(gp);
+
+                    crab->pos = pos;
+                    crab->move_control = ENTITY_MOVE_CONTROL_COPY_LEADER;
+                    crab->leader_handle = leader_handle;
+                    entity_list_append(gp, leader->child_list, crab);
+
+                  }
+
+                }
+
+                {
+                  Entity *leader = spawn_crab_leader(gp);
+                  Entity_handle leader_handle = handle_from_entity(leader);
+                  leader->child_list = push_entity_list(gp);
+                  leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
+                  leader->vel = (Vector2){ .x = -CRAB_NORMAL_STRAFE_SPEED };
+                  leader->leader_strafe_padding = 100;
+                  leader->pos =
+                    (Vector2){
+                      .x = WINDOW_WIDTH+(400-2.5*CRAB_BOUNDS_RADIUS) + (0.5*(float)(crabs_per_row-1))*3.0*CRAB_BOUNDS_RADIUS,
+                      .y = WINDOW_HEIGHT * 0.13f,
+                    };
+
+                  for(int i = 0; i < crabs_per_row; i++) {
+                    Vector2 pos = 
+                    {
+                      WINDOW_WIDTH+(400-2.5*CRAB_BOUNDS_RADIUS) + i*3.0*CRAB_BOUNDS_RADIUS,
+                      WINDOW_HEIGHT * 0.13f,
+                    };
+
+                    Entity *crab = spawn_crab(gp);
+
+                    crab->pos = pos;
+                    crab->move_control = ENTITY_MOVE_CONTROL_COPY_LEADER;
+                    crab->leader_handle = leader_handle;
+                    entity_list_append(gp, leader->child_list, crab);
+
+                  }
+
+                }
+
+              } /* init phase */
+
+            } else {
+              if(gp->live_entities == 1) {
+                goto phase_end;
+              }
+            }
+
+          } break;
+        case 2:
+          {
+
+            if(gp->phase_started == 0) {
+              gp->phase_started = 1;
+
+              { /* init phase */
+
+                Entity *leader = spawn_crab_leader(gp);
+                Entity_handle leader_handle = handle_from_entity(leader);
+                leader->child_list = push_entity_list(gp);
+                leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
+                leader->vel = (Vector2){ .x = -CRAB_NORMAL_STRAFE_SPEED };
+                leader->leader_strafe_padding = 50;
+                leader->pos =
+                  (Vector2){
+                    .x = WINDOW_WIDTH*0.5,
+                    .y = WINDOW_HEIGHT *0.5,
+                  };
+
+                int crab_count = 6;
+                float radius = 120;
+                float step_angle = (2*PI) / (float)crab_count;
+                Vector2 arm = ORBIT_ARM;
+
+                for(int i = 0; i < 6; i++) {
+                  Vector2 pos = Vector2Add(leader->pos, Vector2Scale(Vector2Rotate(arm, (float)i*step_angle), radius));
+
+                  Entity *crab = spawn_crab(gp);
+
+                  crab->pos = pos;
+                  crab->move_control = ENTITY_MOVE_CONTROL_ORBIT_LEADER;
+
+                  crab->orbit_cur_angle = (float)i*step_angle;
+                  crab->orbit_speed = PI*0.15;
+                  crab->orbit_radius = radius;
+
+                  crab->leader_handle = leader_handle;
+                  entity_list_append(gp, leader->child_list, crab);
+
+                }
+
+
+              } /* init phase */
+
+            } else {
+            }
+
+          } break;
+        default:
+          goto wave_end;
+      }
+      break;
+
+    default:
+      gp->next_state = GAME_STATE_VICTORY;
+  }
+
+  goto end;
+
+phase_end:
+  gp->phase_started = 0;
+  gp->phase++;
+  goto end;
+
+wave_end:
+  gp->phase_started = 0;
+  gp->phase = 0;
+  gp->wave++;
+  gp->next_state = GAME_STATE_WAVE_TRANSITION;
+
+  gp->entity_lists_count = 0;
+  arena_clear(gp->entity_node_arena);
+
+  goto end;
+
+end:
+  if(!gp->player->live) {
+    gp->next_state = GAME_STATE_GAME_OVER;
+  }
 
 }
 
@@ -703,25 +1012,27 @@ void game_update_and_draw(Game *gp) {
         UNREACHABLE;
       case GAME_STATE_NONE:
         {
-          gp->next_state = GAME_STATE_DEBUG_SANDBOX;
+          //gp->next_state = GAME_STATE_DEBUG_SANDBOX;
+          gp->next_state = GAME_STATE_MAIN_LOOP;
 
-          gp->player = entity_spawn_player(gp);
+          gp->player = spawn_player(gp);
 
+#if 0
           Entity_list *list = push_entity_list(gp);
 
           Vector2 crab_pos = { .x = WINDOW_WIDTH * 0.4f, .y = WINDOW_HEIGHT * 0.1f };
 
           for(int i = 0; i < 5; i++) {
-            Entity *crab = entity_spawn_crab(gp);
+            Entity *crab = spawn_crab(gp);
             crab->pos = crab_pos;
             Entity_node *node = entity_list_push_front(gp, list, crab);
-            crab->list_id = list->id;
+            crab->parent_list = list;
             crab->list_node = node;
 
             crab_pos.x -= 5;
           }
 
-          Entity *leader_crab = entity_spawn_crab_leader(gp);
+          Entity *leader_crab = spawn_crab_leader(gp);
           leader_crab->pos = (Vector2){ .x =  WINDOW_WIDTH * 0.5f, .y = WINDOW_HEIGHT * 0.1f };
           leader_crab->flags |=
             ENTITY_FLAG_DYNAMICS |
@@ -731,6 +1042,7 @@ void game_update_and_draw(Game *gp) {
           leader_crab->vel = (Vector2){ .x = 300, .y = 0 };
           leader_crab->curve = 0.015f;
           entity_list_append(gp, list, leader_crab);
+#endif
 
 
           goto update_end;
@@ -742,7 +1054,16 @@ void game_update_and_draw(Game *gp) {
       case GAME_STATE_SPAWN_PLAYER:
         {
         } break;
+      case GAME_STATE_WAVE_TRANSITION:
+        {
+        } break;
       case GAME_STATE_MAIN_LOOP:
+        game_main_loop(gp);
+        if(gp->next_state == GAME_STATE_VICTORY) {
+          goto update_end;
+        }
+        break;
+      case GAME_STATE_VICTORY:
         {
         } break;
       case GAME_STATE_GAME_OVER:
@@ -771,10 +1092,12 @@ void game_update_and_draw(Game *gp) {
 
           b8 applied_collision = 0;
 
-          switch(ep->control) {
+          switch(ep->move_control) {
             default:
               UNREACHABLE;
-            case ENTITY_CONTROL_PLAYER:
+            case ENTITY_MOVE_CONTROL_NONE:
+              break;
+            case ENTITY_MOVE_CONTROL_PLAYER:
               {
 
                 b8 was_moving_left = 0;
@@ -849,16 +1172,79 @@ void game_update_and_draw(Game *gp) {
                 }
 
               } break;
-            case ENTITY_CONTROL_AVENGER_BULLET:
+            case ENTITY_MOVE_CONTROL_COPY_LEADER:
               {
+                Entity *leader = get_entity_by_handle(ep->leader_handle);
+                ASSERT(leader);
+
+                ep->vel = leader->vel;
+
               } break;
-            case ENTITY_CONTROL_CRAB_LEADER:
+            case ENTITY_MOVE_CONTROL_ORBIT_LEADER:
               {
+                Entity *leader = get_entity_by_handle(ep->leader_handle);
+                ASSERT(leader);
+
+                Vector2 arm = ORBIT_ARM;
+                ep->pos =
+                  Vector2Add(leader->pos,
+                      Vector2Scale(Vector2Rotate(arm, ep->orbit_cur_angle), ep->orbit_radius));
+
+                if(ep->orbit_cur_angle >= 2*PI) {
+                  ep->orbit_cur_angle = 0;
+                } else {
+                  ep->orbit_cur_angle += ep->orbit_speed * gp->timestep;
+                }
+
+                ep->vel = leader->vel;
+
               } break;
-            case ENTITY_CONTROL_CRAB_FOLLOW_CHAIN:
+            case ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE:
               {
 
-                ASSERT(ep->list_id >= 0);
+                if(ep->flags & ENTITY_FLAG_ON_SCREEN) {
+                  if(ep->child_list->count <= 0) {
+                    entity_die(gp, ep);
+                    goto entity_update_end;
+                  }
+
+                  const float padding = ep->leader_strafe_padding;
+
+                  Entity *furthest_left = ep->child_list->first->ep;
+                  Entity *furthest_right = ep->child_list->last->ep;
+
+                  for(Entity_node *node = ep->child_list->first; node; node = node->next) {
+                    Entity *child = node->ep;
+
+                    if(child->pos.x < furthest_left->pos.x) {
+                      furthest_left = child;
+                    }
+
+                    if(child->pos.x > furthest_right->pos.x) {
+                      furthest_right = child;
+                    }
+
+                  }
+
+                  if(furthest_left->flags & ENTITY_FLAG_ON_SCREEN) {
+                    if(furthest_left->vel.x < 0 && furthest_left->pos.x < padding) {
+                      ep->vel.x *= -1;
+                    }
+                  }
+
+                  if(furthest_right->flags & ENTITY_FLAG_ON_SCREEN) {
+                    if(furthest_right->vel.x > 0 && furthest_right->pos.x > WINDOW_WIDTH-padding) {
+                      ep->vel.x *= -1;
+                    }
+                  }
+
+                }
+
+              } break;
+            case ENTITY_MOVE_CONTROL_FOLLOW_CHAIN:
+              {
+
+                ASSERT(ep->parent_list);
 
                 Entity_node *next_node_in_chain = ep->list_node->next;
                 ASSERT(next_node_in_chain);
@@ -874,37 +1260,15 @@ void game_update_and_draw(Game *gp) {
                   float snap_speed = 4.0f * gp->timestep;
                   ep->pos = Vector2Lerp(ep->pos, ideal_pos, snap_speed);
                 }
-                //if(dist >= leader->radius + 200) {
-                //  float inv_dist = 1/dist;
-                //  ep->vel = Vector2Scale(Vector2Scale(delta, inv_dist), CRAB_FOLLOW_LEADER_SPEED);
-                //} else {
-                //  ep->vel = (Vector2){0};
-                //}
-
 
               } break;
-            case ENTITY_CONTROL_CRAB_FOLLOW_LEADER:
-              {
+          }
 
-#if 0
-                Entity *leader = get_entity_by_handle(ep->leader_handle);
-                ASSERT(leader);
-
-                Vector2 dir_to_leader = Vector2Subtract(leader->pos, ep->pos);
-
-                float dir_len = Vector2Length(dir_to_leader);
-
-                if(dir_len < 10.0f) {
-                  ep->pos = leader->pos;
-                  ep->vel = (Vector2){0};
-                } else {
-                  dir_to_leader = Vector2Scale(dir_to_leader, 1.0f/dir_len);
-                  ep->vel = Vector2Scale(dir_to_leader, CRAB_FOLLOW_LEADER_SPEED);
-                }
-#endif
-
-
-              } break;
+          switch(ep->shoot_control) {
+            default:
+              UNREACHABLE;
+            case ENTITY_SHOOT_CONTROL_NONE:
+              break;
           }
 
           /* flags stuff */
@@ -981,6 +1345,14 @@ void game_update_and_draw(Game *gp) {
 
           }
 
+          if(ep->flags & ENTITY_FLAG_DIE_IF_CHILD_LIST_EMPTY) {
+            ASSERT(ep->child_list);
+            if(ep->child_list->count <= 0) {
+              entity_die(gp, ep);
+              goto entity_update_end;
+            }
+          }
+
           if(ep->flags & ENTITY_FLAG_DIE_ON_APPLY_COLLISION) {
             if(applied_collision) {
               entity_die(gp, ep);
@@ -1006,6 +1378,18 @@ void game_update_and_draw(Game *gp) {
 
           if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
             sprite_update(gp, &ep->sprite);
+          }
+
+          if(ep->flags & ENTITY_FLAG_NOT_ON_SCREEN) {
+            if(CheckCollisionCircleRec(ep->pos, ep->radius, WINDOW_RECT)) {
+              ep->flags ^= ENTITY_FLAG_NOT_ON_SCREEN | ENTITY_FLAG_ON_SCREEN;
+            }
+          }
+
+          if(ep->flags & ENTITY_FLAG_DIE_IF_EXIT_SCREEN) {
+            if(CheckCollisionCircleRec(ep->pos, ep->radius, WINDOW_RECT)) {
+              ep->flags ^= ENTITY_FLAG_DIE_IF_EXIT_SCREEN | ENTITY_FLAG_DIE_IF_OFFSCREEN;
+            }
           }
 
           if(ep->flags & ENTITY_FLAG_DIE_IF_OFFSCREEN) {
@@ -1052,7 +1436,6 @@ update_end:;
 
         if(ep->flags & ENTITY_FLAG_FILL_BOUNDS) {
           Color tint = ep->fill_color;
-
           DrawCircleV(ep->pos, ep->radius, tint);
         }
 

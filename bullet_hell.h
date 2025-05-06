@@ -44,10 +44,10 @@
   X(TITLE_SCREEN)               \
   X(SPAWN_PLAYER)               \
   X(MAIN_LOOP)                  \
+  X(WAVE_TRANSITION)            \
+  X(VICTORY)                    \
   X(GAME_OVER)                  \
   X(DEBUG_SANDBOX)              \
-  //X(WAVE_TRANSITION)            \
-  //X(SPAWN_ENEMIES)              \
 
 #define GAME_DEBUG_FLAGS       \
   X(DEBUG_UI)                  \
@@ -91,7 +91,11 @@
   X(CLAMP_POS_TO_SCREEN)             \
   X(FILL_BOUNDS)                     \
   X(HAS_BULLET_EMITTER)              \
+  X(NOT_ON_SCREEN)                   \
+  X(ON_SCREEN)                       \
   X(DIE_IF_OFFSCREEN)                \
+  X(DIE_IF_EXIT_SCREEN)              \
+  X(DIE_IF_CHILD_LIST_EMPTY)         \
   X(APPLY_COLLISION)                 \
   X(RECEIVE_COLLISION)               \
   X(APPLY_COLLISION_DAMAGE)          \
@@ -99,22 +103,19 @@
   X(DIE_ON_APPLY_COLLISION)          \
   X(HAS_PARTICLE_EMITTER)            \
   X(DAMAGE_BLINK_TINT)               \
-  //X(DIE_IF_ABOVE_SCREEN)             \
-  //X(DIE_IF_BELOW_SCREEN)             \
+  X(CHILDREN_ON_SCREEN)              \
   //X(HAS_SHIELDS)                     \
   //X(DEATH_PARTICLES)                 \
   //X(DEATH_SOUND)                     \
-  //X(BLINK_TEXT)                      \
-  //X(DRAW_TEXT)                       \
 
-#define ENTITY_CONTROLS          \
-  X(PLAYER)                      \
-  X(CRAB_LEADER)                 \
-  X(CRAB_FOLLOW_CHAIN)           \
-  X(CRAB_FOLLOW_LEADER)          \
-  X(CRAB)                        \
-  X(AVENGER_BULLET)              \
-  X(CRAB_BULLET)                 \
+#define ENTITY_MOVE_CONTROLS          \
+  X(PLAYER)                           \
+  X(FOLLOW_CHAIN)                     \
+  X(COPY_LEADER)                      \
+  X(ORBIT_LEADER)                     \
+  X(LEADER_HORIZONTAL_STRAFE)         \
+
+#define ENTITY_SHOOT_CONTROLS         \
 
 #define PARTICLE_FLAGS            \
   X(HAS_SPRITE)                   \
@@ -244,13 +245,21 @@ typedef enum Entity_order {
     ENTITY_ORDER_MAX,
 } Entity_order;
 
-typedef enum Entity_control {
-  ENTITY_CONTROL_NONE = 0,
-#define X(control) ENTITY_CONTROL_##control,
-  ENTITY_CONTROLS
+typedef enum Entity_move_control {
+  ENTITY_MOVE_CONTROL_NONE = 0,
+#define X(move_control) ENTITY_MOVE_CONTROL_##move_control,
+  ENTITY_MOVE_CONTROLS
 #undef X
-    ENTITY_CONTROL_MAX
-} Entity_control;
+    ENTITY_MOVE_CONTROL_MAX
+} Entity_move_control;
+
+typedef enum Entity_shoot_control {
+  ENTITY_SHOOT_CONTROL_NONE = 0,
+#define X(shoot_control) ENTITY_SHOOT_CONTROL_##shoot_control,
+  ENTITY_SHOOT_CONTROLS
+#undef X
+    ENTITY_SHOOT_CONTROL_MAX
+} Entity_shoot_control;
 
 typedef enum Entity_flag_index {
   ENTITY_FLAG_INDEX_INVALID = -1,
@@ -395,7 +404,6 @@ struct Entity_list {
   Entity_node *first;
   Entity_node *last;
   s64 count;
-  s64 id;
 };
 
 struct Entity_handle {
@@ -421,16 +429,21 @@ struct Entity {
   Entity_kind    kind;
   Entity_order   update_order;
   Entity_order   draw_order;
-  Entity_control control;
+
+  Entity_move_control move_control;
+  Entity_shoot_control shoot_control;
+
   Entity_flags   flags;
 
   Entity *free_list_next;
 
   u64 uid;
+  u64 tag;
 
   Entity_handle leader_handle;
 
-  int          list_id;
+  Entity_list *child_list;
+  Entity_list *parent_list;
   Entity_node *list_node;
 
   Vector2 look_dir;
@@ -440,6 +453,12 @@ struct Entity {
   f32     radius;
   f32     curve;
   f32     curve_rolloff_vel;
+
+  f32 orbit_cur_angle;
+  f32 orbit_speed;
+  f32 orbit_radius;
+
+  f32 leader_strafe_padding;
 
   Color bounds_color;
   Color fill_color;
@@ -502,6 +521,12 @@ struct Game {
 
   Entity *player;
 
+  s16 wave;
+  s16 phase;
+  b32 phase_started;
+  f32 phase_timer;
+
+
 };
 
 
@@ -511,6 +536,7 @@ struct Game {
 
 void  game_update_and_draw(Game *gp);
 void  game_reset(Game *gp);
+void  game_main_loop(Game *gp);
 
 Entity* entity_spawn(Game *gp);
 void    entity_die(Game *gp, Entity *ep);
@@ -525,11 +551,13 @@ b32          entity_list_remove(Game *gp, Entity_list *list, Entity *ep);
 Entity* get_entity_by_uid(Game *gp, u64 uid);
 Entity* get_entity_by_handle(Entity_handle handle);
 
-Entity* entity_spawn_player(Game *gp);
-Entity* entity_spawn_crab(Game *gp);
-Entity* entity_spawn_fish(Game *gp);
-Entity* entity_spawn_stingray(Game *gp);
-Entity* entity_spawn_crab_leader(Game *gp);
+Entity_handle handle_from_entity(Entity *ep);
+
+Entity* spawn_player(Game *gp);
+Entity* spawn_crab(Game *gp);
+Entity* spawn_fish(Game *gp);
+Entity* spawn_stingray(Game *gp);
+Entity* spawn_crab_leader(Game *gp);
 
 void entity_emit_bullets(Game *gp, Entity *ep);
 b32  entity_check_collision(Game *gp, Entity *a, Entity *b);
@@ -568,10 +596,10 @@ ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
 ENTITY_FLAG_DYNAMICS |
 0;
 
-const float AVENGER_NORMAL_BULLET_VELOCITY = 1400;
+const float AVENGER_NORMAL_BULLET_VELOCITY = 1800;
 const float AVENGER_NORMAL_BULLET_BOUNDS_RADIUS = 10;
 //const Vector2 AVENGER_NORMAL_BULLET_SPAWN_OFFSET = { 0, -PLAYER_BOUNDS_SIZE.y * 0.6f - AVENGER_NORMAL_BULLET_BOUNDS_SIZE.y };
-const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.18f;
+const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.04f;
 const s32 AVENGER_NORMAL_BULLET_DAMAGE = 5;
 
 const Vector2 CRAB_LEADER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.2f, WINDOW_HEIGHT * 0.1f };
@@ -579,8 +607,9 @@ const Vector2 CRAB_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0
 const Vector2 CRAB_LOOK_DIR = { 0, 1 };
 const s32 CRAB_HEALTH = 15;
 const float CRAB_FOLLOW_LEADER_SPEED = 300;
-const float CRAB_BOUNDS_RADIUS = 50;
+const float CRAB_BOUNDS_RADIUS = 40;
 const float CRAB_SPRITE_SCALE = 2.0f;
+const float CRAB_NORMAL_STRAFE_SPEED = 200;
 //const Color CRAB_SPRITE_TINT;
 const float CRAB_ACCEL = 5.5e3;
 const Color CRAB_BOUNDS_COLOR = { 0, 228, 48, 255 };
@@ -588,5 +617,7 @@ const Entity_kind_mask CRAB_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_PLAYER |
 0;
 const float CRAB_FIRE_COOLDOWN = 0.09f;
+
+const Vector2 ORBIT_ARM = { 0, -1 };
 
 #endif
