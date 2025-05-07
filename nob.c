@@ -5,8 +5,9 @@
 #include "nob.h"
 #include "basic.h"
 #include "arena.h"
-#include "str.h"
 #include "context.h"
+#include "str.h"
+#include "array.h"
 #include "os.h"
 
 
@@ -67,6 +68,8 @@
 
 #define RAYLIB_HEADERS "third_party/raylib/raylib.h", "third_party/raylib/raymath.h", "third_party/raylib/rlgl.h"
 
+
+DECL_ARR_TYPE(Nob_Proc);
 
 int build_metaprogram(void);
 int run_metaprogram(void);
@@ -199,10 +202,12 @@ int build_hot_reload(void) {
   nob_log(NOB_INFO, "building in hot reload mode");
 
   nob_cmd_append(&cmd, CC, DEV_FLAGS, "-fPIC", "hot_reload_main.c", RAYLIB_DYNAMIC_LINK_OPTIONS, "-o", EXE, "-lm");
-  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+  Nob_Proc p1 = nob_cmd_run_async_and_reset(&cmd);
 
   nob_cmd_append(&cmd, CC, DEV_FLAGS, "-fPIC", SHARED, "bullet_hell.c", RAYLIB_DYNAMIC_LINK_OPTIONS, "-o", GAME_MODULE, "-lm");
+
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+  if(!nob_proc_wait(p1)) return 0;
 
   return 1;
 }
@@ -357,6 +362,7 @@ int main(int argc, char **argv) {
   //if(!build_wasm()) return 1;
   if(!build_hot_reload()) return 1;
   //if(!build_static()) return 1;
+
 
   return 0;
 }

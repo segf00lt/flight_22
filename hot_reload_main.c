@@ -48,6 +48,8 @@ int main(void) {
 
     gp->entities = os_alloc(sizeof(Entity) * MAX_ENTITIES);
     gp->particles = os_alloc(sizeof(Particle) * MAX_PARTICLES);
+    memory_set(gp->entities, 0, sizeof(Entity) * MAX_ENTITIES);
+    memory_set(gp->particles, 0, sizeof(Particle) * MAX_PARTICLES);
 
     gp->state = GAME_STATE_NONE;
     gp->scratch = arena_alloc();
