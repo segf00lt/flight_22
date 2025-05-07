@@ -20,9 +20,9 @@
 
 #define TARGET_FPS 60
 
-#define WINDOW_SCALE 256
-#define WINDOW_WIDTH  (3*WINDOW_SCALE)
-#define WINDOW_HEIGHT (4*WINDOW_SCALE)
+#define WINDOW_SCALE 320
+#define WINDOW_WIDTH  (4*WINDOW_SCALE)
+#define WINDOW_HEIGHT (3*WINDOW_SCALE)
 
 #define WINDOW_RECT ((Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
 
@@ -54,10 +54,11 @@
   X(HOT_RELOAD)                \
   X(PLAYER_INVINCIBLE)         \
   X(DRAW_ALL_ENTITY_BOUNDS)    \
-  //X(SANDBOX_LOADED)          \
+  X(SANDBOX_LOADED)            \
 
-#define GAME_FLAGS      \
-  X(PAUSE)              \
+#define GAME_FLAGS         \
+  X(PAUSE)                 \
+  X(PLAYER_CANNOT_SHOOT)   \
 
 #define INPUT_FLAGS         \
   X(ANY)                    \
@@ -96,6 +97,7 @@
   X(DIE_IF_OFFSCREEN)                \
   X(DIE_IF_EXIT_SCREEN)              \
   X(DIE_IF_CHILD_LIST_EMPTY)         \
+  X(DIE_NOW)                         \
   X(APPLY_COLLISION)                 \
   X(RECEIVE_COLLISION)               \
   X(APPLY_COLLISION_DAMAGE)          \
@@ -104,18 +106,25 @@
   X(HAS_PARTICLE_EMITTER)            \
   X(DAMAGE_BLINK_TINT)               \
   X(CHILDREN_ON_SCREEN)              \
-  //X(HAS_SHIELDS)                     \
-  //X(DEATH_PARTICLES)                 \
+  X(HAS_SHIELDS)                     \
+  X(EMIT_SPAWN_PARTICLES)            \
+  X(EMIT_DEATH_PARTICLES)            \
   //X(DEATH_SOUND)                     \
 
 #define ENTITY_MOVE_CONTROLS          \
   X(PLAYER)                           \
-  X(FOLLOW_CHAIN)                     \
+  X(FOLLOW_LEADER)                    \
+  X(FOLLOW_LEADER_CHAIN)              \
   X(COPY_LEADER)                      \
   X(ORBIT_LEADER)                     \
   X(LEADER_HORIZONTAL_STRAFE)         \
+  X(GOTO_WAYPOINT)                    \
 
 #define ENTITY_SHOOT_CONTROLS         \
+
+#define PARTICLE_EMITTER_KINDS        \
+  X(PUFF)                             \
+  X(STREAM)                           \
 
 #define PARTICLE_FLAGS            \
   X(HAS_SPRITE)                   \
@@ -155,6 +164,7 @@ typedef struct Particle Particle;
 typedef struct Bullet_emitter Bullet_emitter;
 typedef u64 Game_flags;
 typedef u64 Game_debug_flags;
+typedef u64 Particle_emitter_kind_mask;
 typedef u64 Bullet_emitter_kind_mask;
 typedef u64 Bullet_emitter_flags;
 typedef struct Bullet_emitter_ring Bullet_emitter_ring;
@@ -166,6 +176,9 @@ typedef u64 Particle_flags;
 typedef struct Entity_handle Entity_handle;
 typedef struct Entity_node Entity_node;
 typedef struct Entity_list Entity_list;
+typedef struct Waypoint Waypoint;
+typedef struct Waypoint_list Waypoint_list;
+typedef void (*Entity_modifier_proc)(Game*, Entity*);
 
 typedef enum Game_state {
 #define X(state) GAME_STATE_##state,
@@ -289,6 +302,18 @@ PARTICLE_FLAGS
 
 STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 64, number_of_particle_flags_is_less_than_64);
 
+typedef enum Particle_emitter_kind {
+  PARTICLE_EMITTER_KIND_INVALID = 0,
+#define X(kind) PARTICLE_EMITTER_KIND_##kind,
+  PARTICLE_EMITTER_KINDS
+#undef X
+    PARTICLE_EMITTER_KIND_MAX,
+} Particle_emitter_kind;
+
+#define X(kind) const Particle_emitter_kind_mask PARTICLE_EMITTER_KIND_MASK_##kind = (Particle_emitter_kind_mask)(1ull<<PARTICLE_EMITTER_KIND_##kind);
+PARTICLE_EMITTER_KINDS
+#undef X
+
 typedef enum Bullet_emitter_kind {
   BULLET_EMITTER_KIND_INVALID = 0,
 #define X(kind) BULLET_EMITTER_KIND_##kind,
@@ -356,7 +381,9 @@ struct Particle {
 };
 
 struct Particle_emitter {
-  int emit_count;
+  Particle_emitter_kind kind;
+
+  s32 n_particles;
 
   Particle particle;
 };
@@ -398,6 +425,21 @@ struct Bullet_emitter {
   b32     shooting;
   float   cooldown_period;
   float   cooldown_timer;
+};
+
+struct Waypoint_list {
+  Waypoint *first;
+  Waypoint *last;
+  s64 count;
+  Entity_modifier_proc action;
+};
+
+struct Waypoint {
+  Waypoint *next;
+  Waypoint *prev;
+  Vector2   pos;
+  f32       radius;
+  u32       tag;
 };
 
 struct Entity_list {
@@ -453,6 +495,7 @@ struct Entity {
   f32     radius;
   f32     curve;
   f32     curve_rolloff_vel;
+  f32     scalar_vel;
 
   f32 orbit_cur_angle;
   f32 orbit_speed;
@@ -460,9 +503,13 @@ struct Entity {
 
   f32 leader_strafe_padding;
 
+  Waypoint_list waypoints;
+  Waypoint     *cur_waypoint;
+
   Color bounds_color;
   Color fill_color;
 
+  Particle_emitter particle_emitter;
   Bullet_emitter bullet_emitter;
 
   Entity_kind_mask apply_collision_mask;
@@ -496,11 +543,7 @@ struct Game {
 
   Arena *scratch;
   Arena *frame_scratch;
-
-  Arena *entity_node_arena;
-
-  Entity_list entity_lists[MAX_ENTITY_LISTS];
-  u64 entity_lists_count;
+  Arena *wave_scratch;
 
   Font font;
 
@@ -509,23 +552,41 @@ struct Game {
   Texture2D sprite_atlas;
 
   u64 entity_uid;
-  Entity entities[MAX_ENTITIES];
+  Entity *entities;
   u64 entities_allocated;
   Entity *entity_free_list;
 
-  Particle particles[MAX_PARTICLES];
+  Particle *particles;
   u64 particles_pos;
 
-  u64 live_entities;
-  u64 live_particles;
+  u32 live_entities;
+  u32 live_particles;
+  u32 live_enemies;
 
   Entity *player;
+  Entity_handle player_handle;
 
   s16 wave;
-  s16 phase;
-  b32 phase_started;
-  f32 phase_timer;
 
+  s16 phase_index;
+
+  struct {
+    u32 flags;
+    b16 check_if_finished;
+    b16 set_timer;
+    s32 accumulator;
+    f32 timer[4];
+    union {
+      Waypoint_list *waypoints;
+    };
+  } phase;
+
+  f32  wave_timer;
+  f32  wave_type_char_timer;
+  s32  wave_chars_typed;
+  s32  wave_banner_type_dir;
+  s32  wave_banner_target_msg_len;
+  Str8 wave_banner_msg;
 
 };
 
@@ -534,9 +595,10 @@ struct Game {
  * function headers
  */
 
-void  game_update_and_draw(Game *gp);
-void  game_reset(Game *gp);
-void  game_main_loop(Game *gp);
+void game_update_and_draw(Game *gp);
+void game_reset(Game *gp);
+void game_main_loop(Game *gp);
+void game_wave_end(Game *gp);
 
 Entity* entity_spawn(Game *gp);
 void    entity_die(Game *gp, Entity *ep);
@@ -548,8 +610,11 @@ Entity_node* entity_list_append(Game *gp, Entity_list *list, Entity *ep);
 Entity_node* entity_list_push_front(Game *gp, Entity_list *list, Entity *ep);
 b32          entity_list_remove(Game *gp, Entity_list *list, Entity *ep);
 
-Entity* get_entity_by_uid(Game *gp, u64 uid);
-Entity* get_entity_by_handle(Entity_handle handle);
+Waypoint* waypoint_list_append(Game *gp, Waypoint_list *list, Vector2 pos, float radius);
+Waypoint* waypoint_list_append_tagged(Game *gp, Waypoint_list *list, Vector2 pos, float radius, u64 tag);
+
+Entity* entity_from_uid(Game *gp, u64 uid);
+Entity* entity_from_handle(Entity_handle handle);
 
 Entity_handle handle_from_entity(Entity *ep);
 
@@ -558,6 +623,8 @@ Entity* spawn_crab(Game *gp);
 Entity* spawn_fish(Game *gp);
 Entity* spawn_stingray(Game *gp);
 Entity* spawn_crab_leader(Game *gp);
+
+void entity_emit_particles(Game *gp, Entity *ep);
 
 void entity_emit_bullets(Game *gp, Entity *ep);
 b32  entity_check_collision(Game *gp, Entity *a, Entity *b);
@@ -573,8 +640,8 @@ b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
  * entity settings
  */
 
-const Vector2 PLAYER_INITIAL_OFFSCREEN_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f };
-const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.5f };
+const Vector2 PLAYER_INITIAL_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
+const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
 const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
 const s32 PLAYER_HEALTH = 100;
 const float PLAYER_BOUNDS_RADIUS = 40;
@@ -619,5 +686,18 @@ ENTITY_KIND_MASK_PLAYER |
 const float CRAB_FIRE_COOLDOWN = 0.09f;
 
 const Vector2 ORBIT_ARM = { 0, -1 };
+
+const Entity_kind_mask ENEMY_KIND_MASK =
+ENTITY_KIND_MASK_CRAB |
+ENTITY_KIND_MASK_FISH |
+ENTITY_KIND_MASK_STINGRAY |
+ENTITY_KIND_MASK_LEADER |
+0;
+
+const float WAVE_DELAY_TIME = 3.0f;
+const float WAVE_BANNER_TYPE_SPEED   = 0.1f;
+const float WAVE_BANNER_FONT_SIZE    = 80.0f;
+const float WAVE_BANNER_FONT_SPACING = 10.0f;
+const Color WAVE_BANNER_FONT_COLOR   = BLACK;
 
 #endif

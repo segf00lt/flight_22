@@ -46,10 +46,13 @@ int main(void) {
   { /* TODO game_init() */
     memory_set(gp, 0, sizeof(Game));
 
+    gp->entities = os_alloc(sizeof(Entity) * MAX_ENTITIES);
+    gp->particles = os_alloc(sizeof(Particle) * MAX_PARTICLES);
+
     gp->state = GAME_STATE_NONE;
-    gp->frame_scratch = arena_alloc();
     gp->scratch = arena_alloc();
-    gp->entity_node_arena = arena_alloc();
+    gp->wave_scratch = arena_alloc(.size = KB(16));
+    gp->frame_scratch = arena_alloc(.size = KB(8));
 
     load_assets(gp);
 
