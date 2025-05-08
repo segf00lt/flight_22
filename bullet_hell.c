@@ -270,15 +270,13 @@ Entity* spawn_crab(Game *gp) {
 
   ep->shoot_control = ENTITY_SHOOT_CONTROL_STRAIGHT_PERIODIC_BURSTS;
   ep->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB_BASIC;
-  ep->bullet_emitter.flags =
-    0;
 
   ep->shooting_pause = CRAB_BURST_PAUSE;
 
   ep->bounds_color = CRAB_BOUNDS_COLOR;
   ep->sprite = SPRITE_CRAB;
   ep->sprite_scale = CRAB_SPRITE_SCALE;
-  ep->sprite_tint = WHITE;
+  ep->sprite_tint = YELLOW;
 
   ep->radius = CRAB_BOUNDS_RADIUS;
 
@@ -372,136 +370,236 @@ void entity_emit_particles(Game *gp, Entity *ep) {
 void entity_emit_bullets(Game *gp, Entity *ep) {
   Bullet_emitter *emitter = &ep->bullet_emitter;
 
-  switch(emitter->kind) {
-    default:
-      UNREACHABLE;
-    case BULLET_EMITTER_KIND_AVENGER:
-      {
-
-        emitter->bullet_collision_mask = PLAYER_APPLY_COLLISION_MASK;
-        emitter->cooldown_period[0] = AVENGER_NORMAL_FIRE_COOLDOWN;
-        emitter->active_rings_mask = 0x1;
-
+  if(!emitter->cocked) {
+    switch(emitter->kind) {
+      default:
+        UNREACHABLE;
+      case BULLET_EMITTER_KIND_AVENGER:
         {
-          Bullet_emitter_ring *ring = &emitter->rings[0];
 
-          ring->spin_vel = 0.0f;
-          ring->radius = 60.0f;
-          ring->n_arms = 1;
-          ring->arms_occupy_circle_sector_percent = 0;
-          ring->n_bullets = 1;
-          ring->bullet_arm_width = 0.0f;
-          ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
-          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
-          ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
-          ring->bullet_bounds_color = GREEN;
-          ring->bullet_fill_color = ORANGE;
-          ring->bullet_flags =
-            ENTITY_FLAG_FILL_BOUNDS |
-            0;
+          emitter->bullet_collision_mask = PLAYER_APPLY_COLLISION_MASK;
+          emitter->cooldown_period[0] = AVENGER_NORMAL_FIRE_COOLDOWN;
+          emitter->active_rings_mask = 0x1;
 
-        }
+          emitter->shots[0] = 1;
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[0];
+
+            ring->spin_vel = 0.0f;
+            ring->radius = 60.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 0;
+            ring->n_bullets = 1;
+            ring->bullet_arm_width = 0.0f;
+            ring->bullet_radius = 15;
+            ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
+            ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_sprite = SPRITE_AVENGER_BULLET;
+            ring->bullet_sprite_tint = WHITE;
+            ring->bullet_sprite_scale = 3.0f;
+            ring->bullet_flags =
+              ENTITY_FLAG_HAS_SPRITE |
+              0;
+
+          }
 
 #if 0
-        {
-          Bullet_emitter_ring *ring = &emitter->rings[0];
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[0];
 
-          ring->spin_vel = 0.1f;
-          ring->radius = 50.0f;
-          ring->n_arms = 1;
-          ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
-          ring->n_bullets = 3;
-          ring->bullet_arm_width = 50.0f;
-          ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
-          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
-          ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
-          ring->bullet_bounds_color = GREEN;
-          ring->bullet_fill_color = ORANGE;
-          ring->bullet_flags =
-            ENTITY_FLAG_FILL_BOUNDS |
-            0;
+            ring->spin_vel = 0.1f;
+            ring->radius = 50.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
+            ring->n_bullets = 3;
+            ring->bullet_arm_width = 50.0f;
+            ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
+            ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
+            ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_fill_color = ORANGE;
+            ring->bullet_flags =
+              ENTITY_FLAG_FILL_BOUNDS |
+              0;
 
-        }
+          }
 
-        {
-          Bullet_emitter_ring *ring = &emitter->rings[1];
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[1];
 
-          //ring->spin_start_angle = (PI);
-          ring->spin_vel = 0.1f;
-          ring->radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS+70.0f;
-          ring->n_arms = 1;
-          ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
-          ring->n_bullets = 1;
-          ring->bullet_arm_width = 20.0f;
-          ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
-          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
-          ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
-          ring->bullet_bounds_color = GREEN;
-          ring->bullet_fill_color = ORANGE;
-          ring->bullet_flags =
-            ENTITY_FLAG_FILL_BOUNDS |
-            0;
+            //ring->spin_start_angle = (PI);
+            ring->spin_vel = 0.1f;
+            ring->radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS+70.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
+            ring->n_bullets = 1;
+            ring->bullet_arm_width = 20.0f;
+            ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
+            ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
+            ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_fill_color = ORANGE;
+            ring->bullet_flags =
+              ENTITY_FLAG_FILL_BOUNDS |
+              0;
 
-        }
+          }
 
-        {
-          Bullet_emitter_ring *ring = &emitter->rings[2];
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[2];
 
-          ring->spin_vel = 0.1f;
-          ring->radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS+100.0f;
-          ring->n_arms = 1;
-          ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
-          ring->n_bullets = 3;
-          ring->bullet_arm_width = 50.0f;
-          ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
-          ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
-          ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
-          ring->bullet_bounds_color = GREEN;
-          ring->bullet_fill_color = ORANGE;
-          ring->bullet_flags =
-            ENTITY_FLAG_FILL_BOUNDS |
-            0;
+            ring->spin_vel = 0.1f;
+            ring->radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS+100.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 2.0f/3.0f;
+            ring->n_bullets = 3;
+            ring->bullet_arm_width = 50.0f;
+            ring->bullet_radius = AVENGER_NORMAL_BULLET_BOUNDS_RADIUS;
+            ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
+            ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_fill_color = ORANGE;
+            ring->bullet_flags =
+              ENTITY_FLAG_FILL_BOUNDS |
+              0;
 
-        }
+          }
 
 #endif
 
-      } break;
-    case BULLET_EMITTER_KIND_CRAB_BASIC:
-      {
-
-
-        emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
-        emitter->cooldown_period[0] = CRAB_FIRE_COOLDOWN;
-        emitter->active_rings_mask = 0x1;
-
+        } break;
+      case BULLET_EMITTER_KIND_ORBIT_AND_SNIPE:
         {
-          Bullet_emitter_ring *ring = &emitter->rings[0];
+          Entity *player = entity_from_handle(gp->player_handle);
+          ASSERT(player);
 
-          ring->spin_vel = 0.0f;
-          ring->radius = 60.0f;
-          ring->n_arms = 1;
-          ring->arms_occupy_circle_sector_percent = 0;
-          ring->n_bullets = 1;
-          ring->bullet_arm_width = 0.0f;
-          ring->bullet_radius = CRAB_NORMAL_BULLET_BOUNDS_RADIUS;
-          ring->bullet_vel = CRAB_NORMAL_BULLET_VELOCITY;
-          ring->bullet_damage = CRAB_NORMAL_BULLET_DAMAGE;
-          ring->bullet_bounds_color = GREEN;
-          ring->bullet_fill_color = ORANGE;
-          ring->bullet_flags =
-            ENTITY_FLAG_FILL_BOUNDS |
+          emitter->rings[0].flags |=
+            BULLET_EMITTER_RING_FLAG_MANUALLY_SET_DIR |
+            BULLET_EMITTER_RING_FLAG_BURST |
             0;
+          emitter->rings[0].burst_shots = 3;
+          emitter->rings[0].burst_cooldown = 0.03f;
+          emitter->rings[0].burst_shots_fired = 0;
+          emitter->rings[0].burst_timer = 0;
+          emitter->rings[0].dir = Vector2Normalize(Vector2Subtract(player->pos, ep->pos));
 
-        }
+          emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
+          emitter->cooldown_period[0] = 1.0f;
+          emitter->cooldown_period[1] = 2.0f;
+          emitter->active_rings_mask = 0x3;
 
-      } break;
+          emitter->shots[0] = 5;
+          emitter->shots[1] = 2;
+
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[0];
+
+            ring->spin_vel = 0.0f;
+            ring->radius = 60.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 0;
+            ring->n_bullets = 1;
+            ring->bullet_arm_width = 0.0f;
+            ring->bullet_radius = CRAB_NORMAL_BULLET_BOUNDS_RADIUS;
+            ring->bullet_vel = CRAB_NORMAL_BULLET_VELOCITY;
+            ring->bullet_damage = CRAB_NORMAL_BULLET_DAMAGE;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_fill_color = ORANGE;
+            ring->bullet_flags =
+              ENTITY_FLAG_FILL_BOUNDS |
+              0;
+          }
+
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[1];
+
+            ring->spin_vel = 0.2f;
+            ring->radius = 30.0f;
+            ring->n_arms = 27;
+            ring->arms_occupy_circle_sector_percent = 26.0f/27.0f;
+            ring->n_bullets = 1;
+            ring->bullet_arm_width = 0.0f;
+            ring->bullet_radius = CRAB_NORMAL_BULLET_BOUNDS_RADIUS;
+            ring->bullet_vel = CRAB_NORMAL_BULLET_VELOCITY;
+            ring->bullet_curve = 0.01f;
+            ring->bullet_damage = CRAB_NORMAL_BULLET_DAMAGE;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_fill_color = ORANGE;
+            ring->bullet_flags =
+              ENTITY_FLAG_FILL_BOUNDS |
+              ENTITY_FLAG_DYNAMICS_HAS_CURVE |
+              0;
+          }
+
+        } break;
+      case BULLET_EMITTER_KIND_CRAB_BASIC:
+        {
+
+          Entity *player = entity_from_handle(gp->player_handle);
+          ASSERT(player);
+
+          emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
+          emitter->active_rings_mask = 0x1;
+
+          emitter->rings[0].flags |=
+            BULLET_EMITTER_RING_FLAG_MANUALLY_SET_DIR |
+            0;
+          emitter->rings[0].dir = Vector2Normalize(Vector2Subtract(player->pos, ep->pos));
+
+          emitter->cooldown_period[0] = 0.8f;
+          emitter->shots[0] = 4;
+
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[0];
+
+            ring->spin_vel = 0.0f;
+            ring->radius = 60.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 0;
+            ring->n_bullets = 1;
+            ring->bullet_arm_width = 0.0f;
+            ring->bullet_radius = CRAB_NORMAL_BULLET_BOUNDS_RADIUS;
+            ring->bullet_vel = CRAB_NORMAL_BULLET_VELOCITY;
+            ring->bullet_damage = CRAB_NORMAL_BULLET_DAMAGE;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_fill_color = ORANGE;
+            ring->bullet_flags =
+              ENTITY_FLAG_FILL_BOUNDS |
+              0;
+
+          }
+
+        } break;
+    }
+
+    emitter->cocked = 1;
+
   }
 
   { /* flags checks */
   } /* flags checks */
 
   {
+    b8 all_rings_finished = 1;
+
+    for(int i = 0; i < MAX_BULLET_EMITTER_RINGS; i++) {
+      if((emitter->active_rings_mask & (1u<<(u32)i)) && emitter->shots[i] > 0) {
+        all_rings_finished = 0;
+      }
+    }
+
+    if(all_rings_finished) {
+      emitter->shoot--;
+    }
+
+    if(emitter->shoot <= 0) {
+      emitter->shoot = 0;
+      emitter->cocked = 0;
+    }
+  }
+
+  if(emitter->shoot) {
 
     for(int ring_i = 0; ring_i < MAX_BULLET_EMITTER_RINGS; ring_i++) {
 
@@ -513,16 +611,49 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
         continue;
       }
 
-      if(emitter->cooldown_timer[ring_i] <= 0.0f) {
-        emitter->cooldown_timer[ring_i] = emitter->cooldown_period[ring_i];
+      Bullet_emitter_ring *ring = &emitter->rings[ring_i];
+
+      if(ring->flags & BULLET_EMITTER_RING_FLAG_BURST) {
+
+        if(ring->burst_shots_fired >= ring->burst_shots) {
+
+          if(emitter->cooldown_timer[ring_i] <= 0.0f) {
+            emitter->cooldown_timer[ring_i] = emitter->cooldown_period[ring_i];
+
+            emitter->shots[ring_i]--;
+            ring->burst_timer = 0.0f;
+            ring->burst_shots_fired = 0;
+
+          } else {
+            emitter->cooldown_timer[ring_i] -= gp->timestep;
+          }
+
+          continue;
+
+        } else {
+
+          if(ring->burst_timer <= 0.0f) {
+            emitter->cooldown_timer[ring_i] = emitter->cooldown_period[ring_i];
+            ring->burst_timer = ring->burst_cooldown;
+            ring->burst_shots_fired++;
+          } else {
+            ring->burst_timer -= gp->timestep;
+            continue;
+          }
+
+        }
+
       } else {
-        emitter->cooldown_timer[ring_i] -= gp->timestep;
-        continue;
+
+        if(emitter->cooldown_timer[ring_i] <= 0.0f) {
+          emitter->cooldown_timer[ring_i] = emitter->cooldown_period[ring_i];
+          emitter->shots[ring_i]--;
+        } else {
+          emitter->cooldown_timer[ring_i] -= gp->timestep;
+          continue;
+        }
+
       }
-
-      emitter->shots[ring_i]--;
-
-      Bullet_emitter_ring *ring = &ep->bullet_emitter.rings[ring_i];
 
       ASSERT(ring->n_arms > 0);
       ASSERT(ring->n_bullets > 0);
@@ -603,6 +734,12 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
           bullet->bounds_color = ring->bullet_bounds_color;
           bullet->fill_color = ring->bullet_fill_color;
 
+          bullet->sprite = ring->bullet_sprite;
+          bullet->sprite_rotation = ring->bullet_sprite_rotation;
+          bullet->sprite_scale = ring->bullet_sprite_scale;
+          bullet->sprite_tint = ring->bullet_sprite_tint;
+
+          bullet->scalar_vel = ring->bullet_vel;
           bullet->vel = Vector2Scale(arm_dir, ring->bullet_vel);
 
           bullet->vel = Vector2Add(bullet->vel, Vector2Scale(ring->dir, Vector2DotProduct(ring->dir, ep->vel)));
@@ -648,11 +785,8 @@ force_inline b32 entity_check_collision(Game *gp, Entity *a, Entity *b) {
   return result;
 }
 
-void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint) {
-  draw_sprite_ex(gp, sp, pos, 1.0f, 0.0f, tint);
-}
-
-void sprite_update(Game *gp, Sprite *sp) {
+void sprite_update(Game *gp, Entity *ep) {
+  Sprite *sp = &ep->sprite;
   if(!(sp->flags & SPRITE_FLAG_STILL)) {
 
     ASSERT(sp->fps > 0);
@@ -714,7 +848,13 @@ b32 sprite_at_keyframe(Sprite sp, s32 keyframe) {
   return result;
 }
 
-void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint) {
+void draw_sprite(Game *gp, Entity *ep) {
+  Sprite sp = ep->sprite;
+  Vector2 pos = ep->pos;
+  f32 scale = ep->sprite_scale;
+  f32 rotation = ep->sprite_rotation;
+  Color tint = ep->sprite_tint;
+
   ASSERT(sp.cur_frame >= 0 && sp.cur_frame < sp.total_frames);
 
   Sprite_frame frame;
@@ -774,6 +914,8 @@ void game_reset(Game *gp) {
   arena_clear(gp->scratch);
   arena_clear(gp->frame_scratch);
   arena_clear(gp->wave_scratch);
+
+  gp->background_y_offset = 0;
 
   memory_set(&gp->phase, 0, sizeof(gp->phase));
   gp->phase_index = 0;
@@ -994,6 +1136,8 @@ void game_main_loop(Game *gp) {
 
                   Entity *crab = spawn_crab(gp);
 
+                  crab->shoot_control = ENTITY_SHOOT_CONTROL_NONE;
+
                   crab->pos = pos;
                   crab->move_control = ENTITY_MOVE_CONTROL_ORBIT_LEADER;
 
@@ -1009,6 +1153,7 @@ void game_main_loop(Game *gp) {
                 Entity *crab = spawn_crab(gp);
                 crab->pos = leader->pos;
                 crab->move_control = ENTITY_MOVE_CONTROL_COPY_LEADER;
+                crab->shoot_control = ENTITY_SHOOT_CONTROL_ORBIT_AND_SNIPE;
                 crab->leader_handle = leader_handle;
                 entity_list_append(gp, leader->child_list, crab);
 
@@ -1137,6 +1282,7 @@ void game_main_loop(Game *gp) {
 
                           crab->pos = pos;
                           crab->move_control = ENTITY_MOVE_CONTROL_ORBIT_LEADER;
+                          crab->shoot_control = ENTITY_SHOOT_CONTROL_NONE;
 
                           crab->orbit_cur_angle = (float)i*step_angle;
                           crab->orbit_speed = -PI*0.15;
@@ -1150,6 +1296,7 @@ void game_main_loop(Game *gp) {
                         Entity *crab = spawn_crab(gp);
                         crab->pos = leader->pos;
                         crab->move_control = ENTITY_MOVE_CONTROL_COPY_LEADER;
+                        crab->shoot_control = ENTITY_SHOOT_CONTROL_ORBIT_AND_SNIPE;
                         crab->leader_handle = leader_handle;
                         entity_list_append(gp, leader->child_list, crab);
 
@@ -1191,6 +1338,7 @@ void game_main_loop(Game *gp) {
 
                           crab->pos = pos;
                           crab->move_control = ENTITY_MOVE_CONTROL_ORBIT_LEADER;
+                          crab->shoot_control = ENTITY_SHOOT_CONTROL_NONE;
 
                           crab->orbit_cur_angle = (float)i*step_angle;
                           crab->orbit_speed = PI*0.15;
@@ -1204,6 +1352,7 @@ void game_main_loop(Game *gp) {
                         Entity *crab = spawn_crab(gp);
                         crab->pos = leader->pos;
                         crab->move_control = ENTITY_MOVE_CONTROL_COPY_LEADER;
+                        crab->shoot_control = ENTITY_SHOOT_CONTROL_ORBIT_AND_SNIPE;
                         crab->leader_handle = leader_handle;
                         entity_list_append(gp, leader->child_list, crab);
 
@@ -1254,7 +1403,11 @@ end:
 
 void game_update_and_draw(Game *gp) {
 
+#ifdef DEBUG
+  gp->timestep = Clamp(1.0f/50.0f, 1.0f/TARGET_FPS, GetFrameTime());
+#else
   gp->timestep = Clamp(1.0f/10.0f, 1.0f/TARGET_FPS, GetFrameTime());
+#endif
 
   gp->next_state = gp->state;
 
@@ -1281,9 +1434,9 @@ void game_update_and_draw(Game *gp) {
       gp->input_flags |= INPUT_FLAG_SHOOT;
     }
 
-    //if(IsKeyDown(KEY_LEFT_SHIFT)) {
-    //  gp->input_flags |= INPUT_FLAG_SLOW_MOVE;
-    //}
+    if(IsKeyDown(KEY_LEFT_SHIFT)) {
+      gp->input_flags |= INPUT_FLAG_SLOW_MOVE;
+    }
 
     if(IsKeyPressed(KEY_ESCAPE)) {
       gp->input_flags |= INPUT_FLAG_PAUSE;
@@ -1336,6 +1489,12 @@ void game_update_and_draw(Game *gp) {
       }
     }
 
+    if(gp->background_y_offset >= WINDOW_HEIGHT) {
+      gp->background_y_offset -= WINDOW_HEIGHT;
+    } else {
+      gp->background_y_offset += gp->timestep * 100;
+    }
+
     switch(gp->state) {
       default:
         UNREACHABLE;
@@ -1350,16 +1509,22 @@ void game_update_and_draw(Game *gp) {
           {
 #ifdef DEBUG
             gp->wave = 0;
+            gp->phase_index = 0;
+
             gp->debug_flags |=
               GAME_DEBUG_FLAG_DEBUG_UI |
               GAME_DEBUG_FLAG_PLAYER_INVINCIBLE |
               0;
-#endif
+#else
 
+            gp->wave = 0;
+            gp->phase_index = 0;
+
+#endif
             gp->next_state = GAME_STATE_WAVE_TRANSITION;
 
             memory_set(&gp->phase, 0, sizeof(gp->phase));
-            gp->phase_index = 0;
+
             gp->flags |= GAME_FLAG_PLAYER_CANNOT_SHOOT;
             gp->wave_timer = WAVE_DELAY_TIME;
             gp->wave_type_char_timer = WAVE_BANNER_TYPE_SPEED;
@@ -1560,7 +1725,7 @@ void game_update_and_draw(Game *gp) {
 
                 if(gp->input_flags & INPUT_FLAG_SHOOT) {
                   if(!(gp->flags & GAME_FLAG_PLAYER_CANNOT_SHOOT)) {
-                    ep->bullet_emitter.shots[0] = 1;
+                    ep->bullet_emitter.shoot = 1;
                   }
                 }
 
@@ -1704,24 +1869,37 @@ void game_update_and_draw(Game *gp) {
                 break;
               case ENTITY_SHOOT_CONTROL_ORBIT_AND_SNIPE:
                 {
-                  // TODO
+                  if(ep->start_shooting_delay < 0.6f) {
+                    ep->start_shooting_delay += gp->timestep;
+                  } else {
+                    ep->bullet_emitter.kind = BULLET_EMITTER_KIND_ORBIT_AND_SNIPE;
+
+                    if(ep->bullet_emitter.shoot <= 0) {
+                      if(ep->shooting_timer <= 0) {
+                        ep->shooting_timer = 1.0f;
+                        ep->bullet_emitter.shoot = 5;
+                      } else {
+                        ep->shooting_timer -= gp->timestep;
+                      }
+                    }
+                  }
+
                 } break;
               case ENTITY_SHOOT_CONTROL_STRAIGHT_PERIODIC_BURSTS:
                 {
 
-                  Entity *player = entity_from_handle(gp->player_handle);
-                  ASSERT(player);
+                  if(ep->start_shooting_delay < 0.6f) {
+                    ep->start_shooting_delay += gp->timestep;
+                  } else {
+                    ep->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB_BASIC;
 
-                  ep->look_dir = Vector2Normalize(Vector2Subtract(player->pos, ep->pos));
-                  ep->bullet_emitter.rings[0].flags |= BULLET_EMITTER_RING_FLAG_MANUALLY_SET_DIR;
-                  ep->bullet_emitter.rings[0].dir = ep->look_dir;
-
-                  if(ep->bullet_emitter.shots[0] <= 0) {
-                    if(ep->shooting_timer >= ep->shooting_pause) {
-                      ep->shooting_timer = 0;
-                      ep->bullet_emitter.shots[0] = 3;
-                    } else {
-                      ep->shooting_timer += gp->timestep;
+                    if(ep->bullet_emitter.shoot <= 0) {
+                      if(ep->shooting_timer <= 0) {
+                        ep->shooting_timer = 2.6f;
+                        ep->bullet_emitter.shoot = 1;
+                      } else {
+                        ep->shooting_timer -= gp->timestep;
+                      }
                     }
                   }
 
@@ -1815,7 +1993,7 @@ void game_update_and_draw(Game *gp) {
           }
 
           if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
-            sprite_update(gp, &ep->sprite);
+            sprite_update(gp, ep);
           }
 
           if(ep->flags & ENTITY_FLAG_NOT_ON_SCREEN) {
@@ -1867,7 +2045,29 @@ update_end:;
 
   defer_loop(BeginTextureMode(gp->render_texture), EndTextureMode())
   { /* draw */
-    ClearBackground(SKYBLUE);
+    ClearBackground(BLACK);
+
+    {
+      Rectangle source =
+      {
+        0, 0, gp->background_texture.width, gp->background_texture.height,
+      };
+
+      Rectangle dest1 =
+      {
+        0, gp->background_y_offset - WINDOW_HEIGHT,
+        WINDOW_WIDTH, WINDOW_HEIGHT,
+      };
+
+      Rectangle dest2 =
+      {
+        0, gp->background_y_offset,
+        WINDOW_WIDTH, WINDOW_HEIGHT,
+      };
+
+      DrawTexturePro(gp->background_texture, source, dest1, VEC2_ZERO, 0, WHITE);
+      DrawTexturePro(gp->background_texture, source, dest2, VEC2_ZERO, 0, WHITE);
+    }
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
       for(int i = 0; i < gp->entities_allocated; i++)
@@ -1883,8 +2083,8 @@ update_end:;
         }
 
         if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
-          Color tint = ep->sprite_tint;
-          draw_sprite_ex(gp, ep->sprite, ep->pos, ep->sprite_scale, 0, tint);
+          //Color tint = ep->sprite_tint;
+          draw_sprite(gp, ep);
         }
 
         if(gp->debug_flags & GAME_DEBUG_FLAG_DRAW_ALL_ENTITY_BOUNDS) {

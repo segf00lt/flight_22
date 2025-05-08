@@ -18,6 +18,7 @@ void load_assets(Game *gp) {
   gp->font = GetFontDefault();
 
   gp->render_texture = LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT);
+  gp->background_texture = LoadTexture("./sprites/islands.png");
   gp->sprite_atlas = LoadTexture("./aseprite/atlas.png");
   SetTextureFilter(gp->sprite_atlas, TEXTURE_FILTER_POINT);
 }
@@ -25,6 +26,7 @@ void load_assets(Game *gp) {
 void unload_assets(Game *gp) {
   UnloadRenderTexture(gp->render_texture);
   UnloadTexture(gp->sprite_atlas);
+  UnloadTexture(gp->background_texture);
 }
 
 int main(void) {

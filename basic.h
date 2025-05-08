@@ -26,6 +26,14 @@
 #define STRINGIFY(x) #x
 #define GLSL(src) STRINGIFY(src)
 
+#ifndef true
+#define true ((b8)1u)
+#endif
+
+#ifndef false
+#define false ((b8)0u)
+#endif
+
 // TODO custom stb sprintf decorator
 //#if defined(stbsp_sprintf) && defined(stbsp_snprintf)
 //#undef sprintf

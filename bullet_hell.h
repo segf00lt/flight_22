@@ -100,6 +100,7 @@
   X(DIE_IF_OFFSCREEN)                \
   X(DIE_IF_EXIT_SCREEN)              \
   X(DIE_IF_CHILD_LIST_EMPTY)         \
+  X(DIE_IF_ORPHANED)                 \
   X(DIE_NOW)                         \
   X(APPLY_COLLISION)                 \
   X(RECEIVE_COLLISION)               \
@@ -140,6 +141,7 @@
   X(TRIPLE_THREAT)                   \
   X(AVENGER)                         \
   X(CRAB_BASIC)                      \
+  X(ORBIT_AND_SNIPE)                 \
   X(FISH)                            \
   X(STINGRAY)                        \
   X(BOSS)                            \
@@ -149,6 +151,7 @@
 #define BULLET_EMITTER_RING_FLAGS   \
   X(MANUALLY_SET_DIR)               \
   X(USE_POINT_BAG)                  \
+  X(BURST)                          \
 
 
 /*
@@ -385,6 +388,7 @@ struct Particle {
   Sprite    sprite;
   Color     sprite_tint;
   float     sprite_scale;
+  float     sprite_rotation;
 };
 
 struct Particle_emitter {
@@ -423,7 +427,13 @@ struct Bullet_emitter_ring {
 
   Sprite bullet_sprite;
   f32    bullet_sprite_scale;
+  f32    bullet_sprite_rotation;
   Color  bullet_sprite_tint;
+
+  f32 burst_cooldown;
+  f32 burst_timer;
+  s32 burst_shots;
+  s32 burst_shots_fired;
 };
 
 struct Bullet_emitter {
@@ -438,6 +448,8 @@ struct Bullet_emitter {
   f32 cooldown_timer[MAX_BULLET_EMITTER_RINGS];
 
   u32 active_rings_mask;
+  b16 cocked;
+  s16 shoot;
 };
 
 struct Waypoint_list {
@@ -511,14 +523,16 @@ struct Entity {
   f32     scalar_vel;
   f32     friction;
 
-  f32 orbit_cur_angle;
-  f32 orbit_speed;
-  f32 orbit_radius;
+  f32     orbit_cur_angle;
+  f32     orbit_speed;
+  f32     orbit_radius;
 
   f32 leader_strafe_padding;
 
   f32 shooting_pause;
   f32 shooting_timer;
+  f32 start_shooting_delay;
+  b32 is_shooting;
 
   b32 received_collision;
   s32 received_damage;
@@ -540,6 +554,7 @@ struct Entity {
 
   Sprite sprite;
   f32    sprite_scale;
+  f32    sprite_rotation;
   Color  sprite_tint;
 
 };
@@ -567,6 +582,8 @@ struct Game {
   RenderTexture2D render_texture;
 
   Texture2D sprite_atlas;
+  Texture2D background_texture;
+  f32 background_y_offset;
 
   u64 entity_uid;
   Entity *entities;
@@ -647,9 +664,8 @@ void entity_emit_bullets(Game *gp, Entity *ep);
 
 b32  entity_check_collision(Game *gp, Entity *a, Entity *b);
 
-void draw_sprite(Game *gp, Sprite sp, Vector2 pos, Color tint);
-void draw_sprite_ex(Game *gp, Sprite sp, Vector2 pos, f32 scale, f32 rotation, Color tint);
-void sprite_update(Game *gp, Sprite *sp);
+void draw_sprite(Game *gp, Entity *ep);
+void sprite_update(Game *gp, Entity *ep);
 Sprite_frame sprite_current_frame(Sprite sp);
 b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
 
@@ -662,10 +678,10 @@ const Vector2 PLAYER_INITIAL_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f 
 const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
 const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
 const s32 PLAYER_HEALTH = 100;
-const float PLAYER_BOUNDS_RADIUS = 30;
+const float PLAYER_BOUNDS_RADIUS = 15;
 const float PLAYER_SPRITE_SCALE = 2.0f;
 const float PLAYER_ACCEL = 1.6e4;
-const float PLAYER_SLOW_FACTOR = 1.5e-1;
+const float PLAYER_SLOW_FACTOR = 0.5f;
 const Color PLAYER_BOUNDS_COLOR = { 255, 0, 0, 255 };
 const Entity_kind_mask PLAYER_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_CRAB     |
@@ -715,10 +731,10 @@ ENTITY_KIND_MASK_STINGRAY |
 ENTITY_KIND_MASK_LEADER |
 0;
 
-const float WAVE_DELAY_TIME = 1.0f;
+const float WAVE_DELAY_TIME = 1.4f;
 const float WAVE_BANNER_TYPE_SPEED   = 0.1f;
 const float WAVE_BANNER_FONT_SIZE    = 80.0f;
 const float WAVE_BANNER_FONT_SPACING = 10.0f;
-const Color WAVE_BANNER_FONT_COLOR   = BLACK;
+const Color WAVE_BANNER_FONT_COLOR   = GOLD;
 
 #endif
