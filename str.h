@@ -4,7 +4,7 @@
 
 #include "basic.h"
 #include "arena.h"
-#include "context.h"
+//#include "context.h"
 
 
 typedef struct Str8 Str8;
@@ -194,7 +194,7 @@ force_inline char* push_cstr_copy_str8(Arena *a, Str8 str) {
   return s;
 }
 
-Str8 push_str8fv(Arena *a, char *fmt, va_list args){
+Str8 push_str8fv(Arena *a, char *fmt, va_list args) {
   va_list args2;
   va_copy(args2, args);
   u32 needed_bytes = stbsp_vsnprintf(0, 0, fmt, args) + 1;
@@ -206,7 +206,7 @@ Str8 push_str8fv(Arena *a, char *fmt, va_list args){
   return result;
 }
 
-Str8 push_str8f(Arena *a, char *fmt, ...){
+Str8 push_str8f(Arena *a, char *fmt, ...) {
   va_list args;
   va_start(args, fmt);
   Str8 result = push_str8fv(a, fmt, args);

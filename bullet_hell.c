@@ -7,6 +7,9 @@
 
 #include "sprite_data.c"
 
+//#include "particle_data.c"
+//#include "particle_atlas.c"
+
 
 /*
  * globals
@@ -208,7 +211,10 @@ Entity* spawn_player(Game *gp) {
 
   ep->sprite = SPRITE_AVENGER;
   ep->sprite_tint = WHITE;
+  ep->effect_tint = BLOOD;
   ep->sprite_scale = PLAYER_SPRITE_SCALE;
+
+  ep->effect_tint_period = 0.5f;
 
   ep->bullet_emitter.kind = BULLET_EMITTER_KIND_AVENGER;
   ep->bullet_emitter.flags =
@@ -234,8 +240,6 @@ Entity* spawn_crab_leader(Game *gp) {
 
   ep->update_order = ENTITY_ORDER_FIRST;
   ep->draw_order = ENTITY_ORDER_LAST;
-
-  ep->pos = CRAB_LEADER_INITIAL_DEBUG_POS;
 
   ep->radius = 16.0f;
   ep->bounds_color = GREEN;
@@ -264,7 +268,6 @@ Entity* spawn_crab(Game *gp) {
   ep->draw_order = ENTITY_ORDER_FIRST;
 
   ep->look_dir = (Vector2){ 0, 1 };
-  ep->pos = CRAB_INITIAL_DEBUG_POS;
 
   ep->health = CRAB_HEALTH;
 
@@ -276,7 +279,10 @@ Entity* spawn_crab(Game *gp) {
   ep->bounds_color = CRAB_BOUNDS_COLOR;
   ep->sprite = SPRITE_CRAB;
   ep->sprite_scale = CRAB_SPRITE_SCALE;
-  ep->sprite_tint = YELLOW;
+  ep->sprite_tint = ORANGE;
+  ep->effect_tint = BLOOD;
+  ep->effect_tint_period = 0.08f;
+  ep->effect_tint_timer_vel = 1.2f;
 
   ep->radius = CRAB_BOUNDS_RADIUS;
 
@@ -344,26 +350,88 @@ Entity* spawn_stingray(Game *gp) {
   return 0;
 }
 
-// TODO particles
+force_inline float get_random_float(float min, float max, int steps) {
+  int val = GetRandomValue(0, steps);
+  float result = Remap((float)val, 0.0f, (float)steps, min, max);
+  return result;
+}
+
 void entity_emit_particles(Game *gp, Entity *ep) {
-  UNIMPLEMENTED;
 
-  Particle_emitter *emitter = &ep->particle_emitter;
+  Particle_emitter emitter = ep->particle_emitter;
 
-  switch(emitter->kind) {
+  Particle buf[MAX_PARTICLES];
+  s32 n_particles = 0;
+
+  switch(emitter) {
     default:
       UNREACHABLE;
-    case PARTICLE_EMITTER_KIND_PUFF:
+    case PARTICLE_EMITTER_SPARKS:
       {
-        s32 n_particles = GetRandomValue(40, 60);
+        n_particles = GetRandomValue(10, 20);
+        ASSERT(n_particles <= MAX_PARTICLES);
 
         for(int i = 0; i < n_particles; i++) {
+          Particle *p = buf + i;
+          *p = (Particle){0};
+
+          p->lifetime = get_random_float(TARGET_FRAME_TIME * 10, TARGET_FRAME_TIME * 20, 10);
+
+          p->pos = ep->pos;
+          p->vel =
+            Vector2Rotate(Vector2Normalize(Vector2Negate(ep->vel)),
+                get_random_float(-PI*0.37f, PI*0.37f, 200));
+
+          p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1800));
+
+          p->radius = get_random_float(1.0f, 2.0f, 4);
+
+          p->friction = (float)GetRandomValue(0, 20);
+
+          p->begin_tint = (Color){ 255, 188, 3, 255 };
+          p->end_tint = ColorAlpha(p->begin_tint, 0.43);
+
+        }
+
+      } break;
+    case PARTICLE_EMITTER_BLOOD:
+      {
+        n_particles = GetRandomValue(50, 60);
+        ASSERT(n_particles <= MAX_PARTICLES);
+
+        for(int i = 0; i < n_particles; i++) {
+          Particle *p = buf + i;
+          *p = (Particle){0};
+
+          p->lifetime = get_random_float(TARGET_FRAME_TIME * 10, TARGET_FRAME_TIME * 20, 10);
+
+          p->pos = ep->pos;
+          p->vel =
+            Vector2Rotate(Vector2Normalize(Vector2Negate(ep->vel)),
+                get_random_float(-PI*0.1f, PI*0.1f, 200));
+
+          p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1800));
+
+          p->radius = get_random_float(1.0f, 1.2f, 4);
+
+          p->friction = (float)GetRandomValue(0, 20);
+
+          p->begin_tint = BLOOD;
+          p->end_tint = ColorAlpha(BLOOD, 0.1);
 
         }
 
       } break;
   }
 
+  for(int i = 0; i < n_particles; i++) {
+    if(gp->particles_pos >= MAX_PARTICLES) {
+      gp->particles_pos = 0;
+    }
+
+    gp->particles[gp->particles_pos++] = buf[i];
+
+  }
 
 }
 
@@ -400,7 +468,10 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
             ring->bullet_sprite_scale = 3.0f;
             ring->bullet_flags =
               ENTITY_FLAG_HAS_SPRITE |
+              ENTITY_FLAG_EMIT_DEATH_PARTICLES |
               0;
+
+            ring->bullet_death_particle_emitter = PARTICLE_EMITTER_SPARKS;
 
           }
 
@@ -471,18 +542,15 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
         } break;
       case BULLET_EMITTER_KIND_ORBIT_AND_SNIPE:
         {
-          Entity *player = entity_from_handle(gp->player_handle);
-          ASSERT(player);
 
           emitter->rings[0].flags |=
-            BULLET_EMITTER_RING_FLAG_MANUALLY_SET_DIR |
+            BULLET_EMITTER_RING_FLAG_LOOK_AT_PLAYER |
             BULLET_EMITTER_RING_FLAG_BURST |
             0;
           emitter->rings[0].burst_shots = 3;
           emitter->rings[0].burst_cooldown = 0.03f;
           emitter->rings[0].burst_shots_fired = 0;
           emitter->rings[0].burst_timer = 0;
-          emitter->rings[0].dir = Vector2Normalize(Vector2Subtract(player->pos, ep->pos));
 
           emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
           emitter->cooldown_period[0] = 1.0f;
@@ -536,16 +604,12 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
       case BULLET_EMITTER_KIND_CRAB_BASIC:
         {
 
-          Entity *player = entity_from_handle(gp->player_handle);
-          ASSERT(player);
-
           emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
           emitter->active_rings_mask = 0x1;
 
           emitter->rings[0].flags |=
-            BULLET_EMITTER_RING_FLAG_MANUALLY_SET_DIR |
+            BULLET_EMITTER_RING_FLAG_LOOK_AT_PLAYER |
             0;
-          emitter->rings[0].dir = Vector2Normalize(Vector2Subtract(player->pos, ep->pos));
 
           emitter->cooldown_period[0] = 0.8f;
           emitter->shots[0] = 4;
@@ -662,8 +726,13 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
       float arms_occupy_circle_sector_angle;
       float arm_step_angle;
 
-      if(ring->flags & BULLET_EMITTER_RING_FLAG_MANUALLY_SET_DIR) {
-        ASSERT(Vector2LengthSqr(ring->dir) > 0);
+      if(ring->flags & BULLET_EMITTER_RING_FLAG_LOOK_AT_PLAYER) {
+
+        Entity *player = entity_from_handle(gp->player_handle);
+        ASSERT(player);
+
+        ring->dir = Vector2Normalize(Vector2Subtract(player->pos, ep->pos));
+
       } else {
         ring->dir = ep->look_dir;
       }
@@ -751,6 +820,9 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
 
           bullet->apply_collision_mask = ep->bullet_emitter.bullet_collision_mask;
           bullet->damage_amount = ring->bullet_damage;
+
+          bullet->spawn_particle_emitter = ring->bullet_spawn_particle_emitter;
+          bullet->death_particle_emitter = ring->bullet_death_particle_emitter;
 
           bullet->pos = bullet_pos;
 
@@ -855,6 +927,10 @@ void draw_sprite(Game *gp, Entity *ep) {
   f32 rotation = ep->sprite_rotation;
   Color tint = ep->sprite_tint;
 
+  if(ep->flags & ENTITY_FLAG_APPLY_EFFECT_TINT) {
+    tint = ColorLerp(ep->sprite_tint, ep->effect_tint, Normalize(ep->effect_tint_timer, 0, ep->effect_tint_period));
+  }
+
   ASSERT(sp.cur_frame >= 0 && sp.cur_frame < sp.total_frames);
 
   Sprite_frame frame;
@@ -892,12 +968,51 @@ void draw_sprite(Game *gp, Entity *ep) {
   DrawTexturePro(gp->sprite_atlas, source_rec, dest_rec, (Vector2){0}, rotation, tint);
 }
 
+void game_init(Game *gp) {
+  memory_set(gp, 0, sizeof(Game));
+
+  gp->entities = os_alloc(sizeof(Entity) * MAX_ENTITIES);
+  gp->particles = os_alloc(sizeof(Particle) * MAX_PARTICLES);
+
+  gp->scratch = arena_alloc();
+  gp->wave_scratch = arena_alloc(.size = KB(16));
+  gp->frame_scratch = arena_alloc(.size = KB(8));
+
+  game_load_assets(gp);
+
+  game_reset(gp);
+}
+
+void game_load_assets(Game *gp) {
+  gp->font = GetFontDefault();
+
+  //Image particle_atlas = LoadImageFromMemory(".png", PARTICLE_ATLAS_DATA, sizeof(PARTICLE_ATLAS_DATA));
+  //ASSERT(IsImageValid(particle_atlas));
+  //gp->particle_atlas = LoadTextureFromImage(particle_atlas);
+
+  gp->particle_atlas = LoadTexture("./sprites/particle_atlas.png");
+  gp->render_texture = LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT);
+  gp->background_texture = LoadTexture("./sprites/islands.png");
+  gp->sprite_atlas = LoadTexture("./aseprite/atlas.png");
+  SetTextureFilter(gp->sprite_atlas, TEXTURE_FILTER_POINT);
+}
+
+void game_unload_assets(Game *gp) {
+  UnloadRenderTexture(gp->render_texture);
+  UnloadTexture(gp->sprite_atlas);
+  UnloadTexture(gp->background_texture);
+}
+
 void game_reset(Game *gp) {
 
   gp->state = GAME_STATE_NONE;
   gp->next_state = GAME_STATE_NONE;
 
   gp->flags = 0;
+
+#ifdef DEBUG
+  gp->debug_flags |= GAME_DEBUG_FLAG_HOT_RELOAD;
+#endif
 
   gp->entity_free_list = 0;
   gp->entities_allocated = 0;
@@ -1867,6 +1982,7 @@ void game_update_and_draw(Game *gp) {
                 UNREACHABLE;
               case ENTITY_SHOOT_CONTROL_NONE:
                 break;
+                // TODO parametrize these controls a bit more, so we can reuse them
               case ENTITY_SHOOT_CONTROL_ORBIT_AND_SNIPE:
                 {
                   if(ep->start_shooting_delay < 0.6f) {
@@ -1964,15 +2080,22 @@ void game_update_and_draw(Game *gp) {
           if(ep->flags & ENTITY_FLAG_DIE_IF_CHILD_LIST_EMPTY) {
             ASSERT(ep->child_list);
             if(ep->child_list->count <= 0) {
-              entity_die(gp, ep);
-              goto entity_update_end;
+              ep->flags |= ENTITY_FLAG_DIE_NOW;
             }
           }
 
           if(ep->flags & ENTITY_FLAG_DIE_ON_APPLY_COLLISION) {
             if(applied_collision) {
-              entity_die(gp, ep);
-              goto entity_update_end;
+              ep->flags |= ENTITY_FLAG_DIE_NOW;
+            }
+          }
+
+          if(ep->flags & ENTITY_FLAG_APPLY_EFFECT_TINT) {
+            if(ep->effect_tint_timer < 0) {
+              ep->effect_tint_timer = 0;
+              ep->flags &= ~ENTITY_FLAG_APPLY_EFFECT_TINT;
+            } else {
+              ep->effect_tint_timer -= ep->effect_tint_timer_vel*gp->timestep;
             }
           }
 
@@ -1983,9 +2106,22 @@ void game_update_and_draw(Game *gp) {
               if(ep->flags & ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE) {
                 ep->health -= ep->received_damage;
                 ep->received_damage = 0;
+
+                ep->flags |= ENTITY_FLAG_APPLY_EFFECT_TINT;
+
+                ep->effect_tint = BLOOD;
+
+                if(ep->effect_tint_period == 0) {
+                  ep->effect_tint_period = 0.02f;
+                }
+                if(ep->effect_tint_timer_vel == 0) {
+                  ep->effect_tint_timer_vel = 1.0f;
+                }
+
+                ep->effect_tint_timer = ep->effect_tint_period;
+
                 if(ep->health <= 0) {
-                  entity_die(gp, ep);
-                  goto entity_update_end;
+                  ep->flags |= ENTITY_FLAG_DIE_NOW;
                 }
               }
 
@@ -2015,7 +2151,29 @@ void game_update_and_draw(Game *gp) {
             }
           }
 
+          if(ep->flags & ENTITY_FLAG_EMIT_SPAWN_PARTICLES) {
+            ep->flags &= ~ENTITY_FLAG_EMIT_SPAWN_PARTICLES;
+
+            if(is_on_screen) {
+              Particle_emitter tmp = ep->particle_emitter;
+              ep->particle_emitter = ep->spawn_particle_emitter;
+              entity_emit_particles(gp, ep);
+              ep->particle_emitter = tmp;
+            }
+
+          }
+
           if(ep->flags & ENTITY_FLAG_DIE_NOW) {
+
+            if(is_on_screen) {
+              if(ep->flags & ENTITY_FLAG_EMIT_DEATH_PARTICLES) {
+                Particle_emitter tmp = ep->particle_emitter;
+                ep->particle_emitter = ep->death_particle_emitter;
+                entity_emit_particles(gp, ep);
+                ep->particle_emitter = tmp;
+              }
+            }
+
             entity_die(gp, ep);
             goto entity_update_end;
           }
@@ -2031,11 +2189,28 @@ entity_update_end:;
     for(int i = 0; i < MAX_PARTICLES; i++) {
       Particle *p = &gp->particles[i];
 
-      if(!p->live) continue;
+      if(p->live >= p->lifetime) {
+        p->live = 0;
+        p->lifetime = 0;
+        continue;
+      }
 
       gp->live_particles++;
 
       { /* particle_update */
+
+        if(!CheckCollisionCircleRec(p->pos, p->radius, WINDOW_RECT)) {
+          p->live = 0;
+          p->lifetime = 0;
+          gp->live_particles--;
+          continue;
+        }
+
+        p->pos = Vector2Add(p->pos, Vector2Scale(p->vel, gp->timestep));
+        p->vel = Vector2Subtract(p->vel, Vector2Scale(p->vel, p->friction*gp->timestep));
+
+        p->live += gp->timestep;
+
       } /* particle_update */
 
     }
@@ -2083,7 +2258,6 @@ update_end:;
         }
 
         if(ep->flags & ENTITY_FLAG_HAS_SPRITE) {
-          //Color tint = ep->sprite_tint;
           draw_sprite(gp, ep);
         }
 
@@ -2101,9 +2275,16 @@ update_end:;
     for(int i = 0; i < MAX_PARTICLES; i++) {
       Particle *p = &gp->particles[i];
 
-      if(!p->live) continue;
+      if(p->live >= p->lifetime) continue;
 
       { /* particle_draw */
+
+        Rectangle rec = { p->pos.x - p->radius, p->pos.y - p->radius, TIMES2(p->radius), TIMES2(p->radius) };
+
+        Color tint = ColorLerp(p->begin_tint, p->end_tint, Normalize(p->live, 0, p->lifetime));
+
+        DrawRectangleRec(rec, tint);
+
       } /* particle_draw */
 
     }

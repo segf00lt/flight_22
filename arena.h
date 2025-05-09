@@ -53,10 +53,13 @@ void arena_pop(Arena *arena, u64 amount);
 Arena_scope scope_begin(Arena *arena);
 void scope_end(Arena_scope scope);
 
-#define push_array_no_zero_aligned(a, T, n, align) (T *)arena_push((a), sizeof(T)*(n), (align))
-#define push_array_aligned(a, T, n, align) (T *)memory_zero(push_array_no_zero_aligned(a, T, n, align), sizeof(T)*(n))
+#define push_array_no_zero_aligned(a, T, n, align) (T*)arena_push((a), sizeof(T)*(n), (align))
+#define push_array_aligned(a, T, n, align) (T*)memory_zero(push_array_no_zero_aligned(a, T, n, align), sizeof(T)*(n))
 #define push_array_no_zero(a, T, n) push_array_no_zero_aligned(a, T, n, MAX(8, align_of(T)))
 #define push_array(a, T, n) push_array_aligned(a, T, n, MAX(8, align_of(T)))
+#define push_struct(a, T) push_array(a, T, 1)
+#define push_struct_no_zero(a, T) push_array_no_zero(a, T, 1)
+
 
 
 #endif

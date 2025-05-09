@@ -22,9 +22,14 @@ void scratch_clear(void);
 #define scratch_push_array_no_zero(T, n) push_array_no_zero_aligned(context_scratch_arena, T, n, MAX(8, align_of(T)))
 #define scratch_push_array(T, n) push_array_aligned(context_scratch_arena, T, n, MAX(8, align_of(T)))
 
+#define scratch_push_struct_no_zero(T) push_array_no_zero_aligned(context_scratch_arena, T, 1, MAX(8, align_of(T)))
+#define scratch_push_struct(T) push_array_aligned(context_scratch_arena, T, 1, MAX(8, align_of(T)))
+
 #define scratch_push_str8_copy(str) push_str8_copy(context_scratch_arena, (str))
 #define scratch_push_str8_copy_cstr(cstr) push_str8_copy_cstr(context_scratch_arena, (cstr))
-#define scratch_push_str8f(fmt, ...) push_str8f(context_scratch_arena, (fmt), __VA_ARGS__)
+
+Str8 scratch_push_str8f(char *fmt, ...);
+
 #define scratch_push_cstr_copy_str8(str) push_cstr_copy_str8(context_scratch_arena, (str))
 
 #define scratch_scope_begin() scope_begin(context_scratch_arena)
@@ -53,6 +58,14 @@ void context_init(void) {
 
 void context_close(void) {
   arena_free(context_scratch_arena);
+}
+
+Str8 scratch_push_str8f(char *fmt, ...){
+  va_list args;
+  va_start(args, fmt);
+  Str8 result = push_str8fv(context_scratch_arena, fmt, args);
+  va_end(args);
+  return result;
 }
 
 #endif

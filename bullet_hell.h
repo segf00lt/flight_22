@@ -19,6 +19,7 @@
  */
 
 #define TARGET_FPS 60
+#define TARGET_FRAME_TIME ((float)(1.0f / (float)TARGET_FPS))
 
 #define WINDOW_SCALE 320
 #define WINDOW_WIDTH  (4*WINDOW_SCALE)
@@ -28,13 +29,15 @@
 #define WINDOW_RECT ((Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
 
 #define MAX_ENTITIES 4096
-#define MAX_PARTICLES 1024
+#define MAX_PARTICLES 2048
 #define MAX_BULLET_EMITTER_RINGS 4
 #define MAX_BULLETS_IN_BAG 8
 #define MAX_LEADERS 32
 #define MAX_ENTITY_LISTS 16
 
 #define FRICTION ((float)40.0)
+
+#define BLOOD ((Color){ 255, 0, 0, 255 })
 
 
 /*
@@ -108,12 +111,11 @@
   X(RECEIVE_COLLISION_DAMAGE)        \
   X(DIE_ON_APPLY_COLLISION)          \
   X(HAS_PARTICLE_EMITTER)            \
-  X(DAMAGE_BLINK_TINT)               \
   X(CHILDREN_ON_SCREEN)              \
   X(HAS_SHIELDS)                     \
   X(EMIT_SPAWN_PARTICLES)            \
   X(EMIT_DEATH_PARTICLES)            \
-  //X(DEATH_SOUND)                     \
+  X(APPLY_EFFECT_TINT)               \
 
 #define ENTITY_MOVE_CONTROLS          \
   X(PLAYER)                           \
@@ -128,14 +130,13 @@
   X(STRAIGHT_PERIODIC_BURSTS)         \
   X(ORBIT_AND_SNIPE)                  \
 
-#define PARTICLE_EMITTER_KINDS        \
-  X(PUFF)                             \
-  X(STREAM)                           \
+#define PARTICLE_EMITTERS        \
+  X(PUFF)                        \
+  X(SPARKS)                      \
+  X(BLOOD)                       \
+  X(STREAM)                      \
 
 #define PARTICLE_FLAGS            \
-  X(HAS_SPRITE)                   \
-  X(DIE_WHEN_ANIM_FINISH)         \
-  X(MULTIPLE_ANIM_CYCLES)         \
 
 #define BULLET_EMITTER_KINDS         \
   X(TRIPLE_THREAT)                   \
@@ -149,7 +150,7 @@
 #define BULLET_EMITTER_FLAGS         \
 
 #define BULLET_EMITTER_RING_FLAGS   \
-  X(MANUALLY_SET_DIR)               \
+  X(LOOK_AT_PLAYER)                 \
   X(USE_POINT_BAG)                  \
   X(BURST)                          \
 
@@ -169,7 +170,6 @@
 typedef struct Game Game;
 typedef struct Entity Entity;
 typedef Entity* Entity_ptr;
-typedef struct Particle_emitter Particle_emitter;
 typedef struct Particle Particle;
 typedef struct Bullet_emitter Bullet_emitter;
 typedef u64 Game_flags;
@@ -182,7 +182,7 @@ typedef u64 Bullet_emitter_ring_flags;
 typedef u64 Input_flags;
 typedef u64 Entity_flags;
 typedef u64 Entity_kind_mask;
-typedef u64 Particle_flags;
+typedef u32 Particle_flags;
 typedef struct Entity_handle Entity_handle;
 typedef struct Entity_node Entity_node;
 typedef struct Entity_list Entity_list;
@@ -306,23 +306,19 @@ typedef enum Particle_flag_index {
     PARTICLE_FLAG_INDEX_MAX,
 } Particle_flag_index;
 
-#define X(flag) const Particle_flags PARTICLE_FLAG_##flag = (Particle_flags)(1ull<<PARTICLE_FLAG_INDEX_##flag);
+#define X(flag) const Particle_flags PARTICLE_FLAG_##flag = (Particle_flags)(1u<<PARTICLE_FLAG_INDEX_##flag);
 PARTICLE_FLAGS
 #undef X
 
-STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 64, number_of_particle_flags_is_less_than_64);
+STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 32, number_of_particle_flags_is_less_than_32);
 
-typedef enum Particle_emitter_kind {
-  PARTICLE_EMITTER_KIND_INVALID = 0,
-#define X(kind) PARTICLE_EMITTER_KIND_##kind,
-  PARTICLE_EMITTER_KINDS
+typedef enum Particle_emitter {
+  PARTICLE_EMITTER_INVALID = 0,
+#define X(kind) PARTICLE_EMITTER_##kind,
+  PARTICLE_EMITTERS
 #undef X
-    PARTICLE_EMITTER_KIND_MAX,
-} Particle_emitter_kind;
-
-#define X(kind) const Particle_emitter_kind_mask PARTICLE_EMITTER_KIND_MASK_##kind = (Particle_emitter_kind_mask)(1ull<<PARTICLE_EMITTER_KIND_##kind);
-PARTICLE_EMITTER_KINDS
-#undef X
+    PARTICLE_EMITTER_MAX,
+} Particle_emitter;
 
 typedef enum Bullet_emitter_kind {
   BULLET_EMITTER_KIND_INVALID = 0,
@@ -377,26 +373,17 @@ DECL_SLICE_TYPE(Rectangle);
  */
 
 struct Particle {
-  b32 live;
-
   Particle_flags flags;
+
+  f32 live;
+  f32 lifetime;
 
   Vector2 pos;
   Vector2 vel;
-  Vector2 half_size;
-
-  Sprite    sprite;
-  Color     sprite_tint;
-  float     sprite_scale;
-  float     sprite_rotation;
-};
-
-struct Particle_emitter {
-  Particle_emitter_kind kind;
-
-  s32 n_particles;
-
-  Particle particle;
+  f32     radius; /* this says radius, but the particles are squares */
+  f32     friction;
+  Color   begin_tint;
+  Color   end_tint;
 };
 
 struct Bullet_emitter_ring {
@@ -424,6 +411,9 @@ struct Bullet_emitter_ring {
   Color        bullet_bounds_color;
   Color        bullet_fill_color;
   Entity_flags bullet_flags;
+
+  Particle_emitter bullet_spawn_particle_emitter;
+  Particle_emitter bullet_death_particle_emitter;
 
   Sprite bullet_sprite;
   f32    bullet_sprite_scale;
@@ -548,6 +538,9 @@ struct Entity {
   Waypoint     *cur_waypoint;
 
   Particle_emitter particle_emitter;
+  Particle_emitter spawn_particle_emitter;
+  Particle_emitter death_particle_emitter;
+
   Bullet_emitter bullet_emitter;
 
   Entity_kind_mask apply_collision_mask;
@@ -556,6 +549,10 @@ struct Entity {
   f32    sprite_scale;
   f32    sprite_rotation;
   Color  sprite_tint;
+  Color  effect_tint;
+  f32    effect_tint_timer_vel;
+  f32    effect_tint_period;
+  f32    effect_tint_timer;
 
 };
 
@@ -581,8 +578,10 @@ struct Game {
 
   RenderTexture2D render_texture;
 
+  Texture2D particle_atlas;
   Texture2D sprite_atlas;
   Texture2D background_texture;
+
   f32 background_y_offset;
 
   u64 entity_uid;
@@ -629,6 +628,11 @@ struct Game {
  * function headers
  */
 
+float get_random_float(float min, float max, int steps);
+
+void game_init(Game *gp);
+void game_load_assets(Game *gp);
+void game_unload_assets(Game *gp);
 void game_update_and_draw(Game *gp);
 void game_reset(Game *gp);
 void game_main_loop(Game *gp);
@@ -678,7 +682,7 @@ const Vector2 PLAYER_INITIAL_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f 
 const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
 const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
 const s32 PLAYER_HEALTH = 100;
-const float PLAYER_BOUNDS_RADIUS = 15;
+const float PLAYER_BOUNDS_RADIUS = 22;
 const float PLAYER_SPRITE_SCALE = 2.0f;
 const float PLAYER_ACCEL = 1.6e4;
 const float PLAYER_SLOW_FACTOR = 0.5f;
@@ -702,10 +706,11 @@ const float AVENGER_NORMAL_BULLET_BOUNDS_RADIUS = 10;
 const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.04f;
 const s32 AVENGER_NORMAL_BULLET_DAMAGE = 5;
 
-const Vector2 CRAB_LEADER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.2f, WINDOW_HEIGHT * 0.1f };
-const Vector2 CRAB_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.2f };
 const Vector2 CRAB_LOOK_DIR = { 0, 1 };
-const s32 CRAB_HEALTH = 10;
+const s32 CRAB_HEALTH = 100;
+const s32 BIG_CRAB_HEALTH = 20;
+const s32 LARGE_CRAB_HEALTH = 25;
+const s32 HUGE_CRAB_HEALTH = 30;
 const float CRAB_FOLLOW_LEADER_SPEED = 300;
 const float CRAB_BOUNDS_RADIUS = 40;
 const float CRAB_SPRITE_SCALE = 2.0f;

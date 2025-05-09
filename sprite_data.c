@@ -1,6 +1,6 @@
 
 /////////////////////////
-// BEGIN GENERATED
+/// BEGIN GENERATED
 
 
 /* sprite frames array */
@@ -120,5 +120,5 @@ const Sprite SPRITE_YELLOW_PUFF = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first
 
 
 /////////////////////////
-// END GENERATED
+/// END GENERATED
 
