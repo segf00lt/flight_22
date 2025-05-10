@@ -80,6 +80,13 @@ Str8 str8_to_lower(Arena *a, Str8 str);
 #endif
 
 #include "stb_sprintf.h"
+#define jlib_str_vsnprintf stbsp_vsnprintf
+
+//#if defined(OS_WEB)
+//#include <stdio.h>
+//#define jlib_str_vsnprintf vsnprintf
+//#else
+//#endif
 
 force_inline void str8_list_append_node_(Str8_list *list, Str8_node *node) {
   sll_queue_push(list->first, list->last, node);
@@ -197,10 +204,10 @@ force_inline char* push_cstr_copy_str8(Arena *a, Str8 str) {
 Str8 push_str8fv(Arena *a, char *fmt, va_list args) {
   va_list args2;
   va_copy(args2, args);
-  u32 needed_bytes = stbsp_vsnprintf(0, 0, fmt, args) + 1;
+  u32 needed_bytes = jlib_str_vsnprintf(0, 0, fmt, args) + 1;
   Str8 result = {0};
-  result.s = push_array_no_zero(a, u8, needed_bytes);
-  result.len = stbsp_vsnprintf((char*)result.s, needed_bytes, fmt, args2);
+  result.s = (u8*)arena_push(a, sizeof(u8) * needed_bytes, align_of(u8));
+  result.len = jlib_str_vsnprintf((char*)result.s, needed_bytes, fmt, args2);
   result.s[result.len] = 0;
   va_end(args2);
   return result;

@@ -14,7 +14,7 @@
 #define CC "clang"
 #define DEV_FLAGS "-g", "-O0", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-D_UNITY_BUILD_", "-DDEBUG"
 #define RELEASE_FLAGS "-O2", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-D_UNITY_BUILD_"
-#define WASM_FLAGS "-Os", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-D_UNITY_BUILD_"
+#define WASM_FLAGS "-Os", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-Wno-pthreads-mem-growth", "-D_UNITY_BUILD_"
 #define TARGET "bullet_hell.c"
 #define EXE "bullet_hell"
 #define LDFLAGS "-lraylib", "-lm"
@@ -79,6 +79,7 @@ int build_release(void);
 int build_wasm(void);
 int build_itch(void);
 int run_tags(void);
+int clean_raylib(void);
 int build_raylib(void);
 int build_raylib_static(void);
 int build_raylib_shared(void);
@@ -98,19 +99,28 @@ int build_raylib(void) {
   nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  nob_cmd_append(&cmd, "make", "clean");
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  nob_cmd_append(&cmd, "make", "clean");
-  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+  ASSERT(os_set_current_dir(project_root_path));
 
-  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
+  return 1;
+}
+
+int clean_raylib(void) {
+  nob_log(NOB_INFO, "cleaning raylib files");
+
+  Nob_Cmd cmd = {0};
+
+  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
+
+  nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   ASSERT(os_set_current_dir(project_root_path));
@@ -124,9 +134,6 @@ int build_raylib_static(void) {
   Nob_Cmd cmd = {0};
 
   ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
-
-  nob_cmd_append(&cmd, "make", "clean");
-  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
@@ -143,9 +150,6 @@ int build_raylib_shared(void) {
 
   ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
 
-  nob_cmd_append(&cmd, "make", "clean");
-  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
-
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
@@ -160,9 +164,6 @@ int build_raylib_web(void) {
   Nob_Cmd cmd = {0};
 
   ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
-
-  nob_cmd_append(&cmd, "make", "clean");
-  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
@@ -243,7 +244,7 @@ int build_wasm(void) {
   ASSERT(nob_mkdir_if_not_exists("./build/wasm"));
 
   char *target = "wasm_main.c";
-  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sAUDIO_WORKLET=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=0", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-o", "./build/wasm/bullet_hell.js", "-lpthread");
+  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/islands.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=0", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-o", "./build/wasm/bullet_hell.js", "-lpthread");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
@@ -255,10 +256,10 @@ int build_itch(void) {
   nob_log(NOB_INFO, "building for WASM");
 
   ASSERT(nob_mkdir_if_not_exists("build"));
-  ASSERT(nob_mkdir_if_not_exists("./build/wasm"));
+  ASSERT(nob_mkdir_if_not_exists("./build/itch"));
 
   char *target = "wasm_main.c";
-  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sAUDIO_WORKLET=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "--shell-file", "itch_shell.html", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=1", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-sASYNCIFY", "-o", "./build/itch/index.html", "-lpthread");
+  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/islands.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall,HEAPF32", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "--shell-file", "itch_shell.html", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=1", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-sASYNCIFY", "-o", "./build/itch/index.html", "-pthread", "-sALLOW_MEMORY_GROWTH",scratch_push_str8f("-sSTACK_SIZE=%lu", MB(10)).s);
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   //ASSERT(os_move_file(str8_lit("./build/itch/bullet_hell.html"), str8_lit("./build/itch/index.html")));
@@ -348,10 +349,13 @@ int main(int argc, char **argv) {
 
   NOB_GO_REBUILD_URSELF(argc, argv);
 
+  // TODO make a build dir for the raylib binary files
+  //clean_raylib();
   //if(!generate_vim_project_file()) return 1;
+  //if(!build_raylib()) return 1;
   //if(!build_raylib_web()) return 1;
   //if(!build_raylib_static()) return 1;
-  //if(!build_raylib_shared()) return 1;
+  //if(!build_raylib_shared()) return 0;
   //if(!build_metaprogram()) return 1;
 
   run_metaprogram();

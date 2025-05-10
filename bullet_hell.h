@@ -29,13 +29,11 @@
 #define WINDOW_RECT ((Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
 
 #define MAX_ENTITIES 4096
-#define MAX_PARTICLES 2048
+#define MAX_PARTICLES 8192
 #define MAX_BULLET_EMITTER_RINGS 4
 #define MAX_BULLETS_IN_BAG 8
 #define MAX_LEADERS 32
 #define MAX_ENTITY_LISTS 16
-
-#define FRICTION ((float)40.0)
 
 #define BLOOD ((Color){ 255, 0, 0, 255 })
 
@@ -81,9 +79,7 @@
   X(LEADER)                    \
   X(BULLET)                    \
   X(CRAB)                      \
-  X(FISH)                      \
-  X(STINGRAY)                  \
-  X(PARROT)                    \
+  X(SHIELD)                    \
   X(BOSS)                      \
 
 #define ENTITY_ORDERS   \
@@ -109,6 +105,7 @@
   X(RECEIVE_COLLISION)               \
   X(APPLY_COLLISION_DAMAGE)          \
   X(RECEIVE_COLLISION_DAMAGE)        \
+  X(DAMAGE_INCREMENTS_SCORE)         \
   X(DIE_ON_APPLY_COLLISION)          \
   X(HAS_PARTICLE_EMITTER)            \
   X(CHILDREN_ON_SCREEN)              \
@@ -127,25 +124,29 @@
   X(GOTO_WAYPOINT)                    \
 
 #define ENTITY_SHOOT_CONTROLS         \
-  X(STRAIGHT_PERIODIC_BURSTS)         \
-  X(ORBIT_AND_SNIPE)                  \
+  X(ONCE)                             \
+  X(PERIODIC_1)                       \
+  X(PERIODIC_2)                       \
+  X(PERIODIC_3)                       \
+  X(PERIODIC_4)                       \
 
 #define PARTICLE_EMITTERS        \
-  X(PUFF)                        \
   X(SPARKS)                      \
-  X(BLOOD)                       \
-  X(STREAM)                      \
+  X(BLOOD_SPIT)                  \
+  X(BLOOD_PUFF)                  \
+  X(PINK_PUFF)                   \
+  X(GREEN_PUFF)                  \
+  X(WHITE_PUFF)                  \
 
 #define PARTICLE_FLAGS            \
 
 #define BULLET_EMITTER_KINDS         \
-  X(TRIPLE_THREAT)                   \
+  X(AVENGER_DOUBLE_BARREL)           \
+  X(AVENGER_TRIPLE_THREAT)           \
   X(AVENGER)                         \
   X(CRAB_BASIC)                      \
-  X(ORBIT_AND_SNIPE)                 \
-  X(FISH)                            \
-  X(STINGRAY)                        \
-  X(BOSS)                            \
+  X(CRAB_BATTLE_RIFLE)               \
+  X(CRAB_RADIAL_BOOM)                \
 
 #define BULLET_EMITTER_FLAGS         \
 
@@ -257,6 +258,13 @@ typedef enum Entity_kind {
 #define X(kind) const Entity_kind_mask ENTITY_KIND_MASK_##kind = (Entity_kind_mask)(1ull<<ENTITY_KIND_##kind);
 ENTITY_KINDS
 #undef X
+
+char *Entity_kind_strings[ENTITY_KIND_MAX] = {
+  "",
+#define X(kind) #kind,
+  ENTITY_KINDS
+#undef X
+};
 
 STATIC_ASSERT(ENTITY_KIND_MAX < 64, number_of_entity_kinds_is_less_than_64);
 
@@ -519,10 +527,8 @@ struct Entity {
 
   f32 leader_strafe_padding;
 
-  f32 shooting_pause;
-  f32 shooting_timer;
+  f32 shooting_pause_timer;
   f32 start_shooting_delay;
-  b32 is_shooting;
 
   b32 received_collision;
   s32 received_damage;
@@ -614,6 +620,9 @@ struct Game {
     };
   } phase;
 
+  s32 score;
+  s32 player_health;
+
   f32  wave_timer;
   f32  wave_type_char_timer;
   s32  wave_chars_typed;
@@ -689,8 +698,6 @@ const float PLAYER_SLOW_FACTOR = 0.5f;
 const Color PLAYER_BOUNDS_COLOR = { 255, 0, 0, 255 };
 const Entity_kind_mask PLAYER_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_CRAB     |
-ENTITY_KIND_MASK_FISH     |
-ENTITY_KIND_MASK_STINGRAY |
 0;
 
 const Entity_flags DEFAULT_BULLET_FLAGS =
@@ -707,16 +714,19 @@ const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.04f;
 const s32 AVENGER_NORMAL_BULLET_DAMAGE = 5;
 
 const Vector2 CRAB_LOOK_DIR = { 0, 1 };
-const s32 CRAB_HEALTH = 100;
-const s32 BIG_CRAB_HEALTH = 20;
-const s32 LARGE_CRAB_HEALTH = 25;
+
+const s32 CRAB_HEALTH = 10;
+const s32 BIG_CRAB_HEALTH = 25;
+const s32 LARGE_CRAB_HEALTH = 35;
 const s32 HUGE_CRAB_HEALTH = 30;
+
 const float CRAB_FOLLOW_LEADER_SPEED = 300;
 const float CRAB_BOUNDS_RADIUS = 40;
 const float CRAB_SPRITE_SCALE = 2.0f;
-const float CRAB_NORMAL_STRAFE_SPEED = 200;
-//const Color CRAB_SPRITE_TINT;
+const float CRAB_NORMAL_STRAFE_SPEED = 400;
+
 const float CRAB_ACCEL = 5.5e3;
+
 const Color CRAB_BOUNDS_COLOR = { 0, 228, 48, 255 };
 const Entity_kind_mask CRAB_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_PLAYER |
@@ -731,8 +741,7 @@ const Vector2 ORBIT_ARM = { 0, -1 };
 
 const Entity_kind_mask ENEMY_KIND_MASK =
 ENTITY_KIND_MASK_CRAB |
-ENTITY_KIND_MASK_FISH |
-ENTITY_KIND_MASK_STINGRAY |
+ENTITY_KIND_MASK_SHIELD |
 ENTITY_KIND_MASK_LEADER |
 0;
 
