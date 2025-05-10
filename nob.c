@@ -62,15 +62,16 @@
 #error "unsupported operating system"
 #endif
 
-#define RAYLIB_DYNAMIC_LINK_OPTIONS "-L./third_party/raylib/",  "-I./third_party/raylib/", "-lraylib", "-Wl,-rpath,./third_party/raylib/"
-#define RAYLIB_STATIC_LINK_OPTIONS "-I./third_party/raylib/", "-L./third_party/raylib/", "./third_party/raylib/libraylib.a"
-#define RAYLIB_STATIC_LINK_WASM_OPTIONS "-I./third_party/raylib/", "-L./third_party/raylib/", "./third_party/raylib/libraylib.web.a"
+#define RAYLIB_DYNAMIC_LINK_OPTIONS "-L./third_party/raylib/build/",  "-I./third_party/raylib/", "-lraylib", "-Wl,-rpath,./third_party/raylib/build/"
+#define RAYLIB_STATIC_LINK_OPTIONS "-I./third_party/raylib/build/", "-L./third_party/raylib/build/", "./third_party/raylib/build/libraylib.a"
+#define RAYLIB_STATIC_LINK_WASM_OPTIONS "-I./third_party/raylib/build/", "-L./third_party/raylib/build/", "./third_party/raylib/build/libraylib.web.a"
 
 #define RAYLIB_HEADERS "third_party/raylib/raylib.h", "third_party/raylib/raymath.h", "third_party/raylib/rlgl.h"
 
 
 DECL_ARR_TYPE(Nob_Proc);
 
+int bootstrap_project(void);
 int build_metaprogram(void);
 int run_metaprogram(void);
 int build_hot_reload(void);
@@ -79,12 +80,10 @@ int build_release(void);
 int build_wasm(void);
 int build_itch(void);
 int run_tags(void);
-int clean_raylib(void);
 int build_raylib(void);
-int build_raylib_static(void);
-int build_raylib_shared(void);
-int build_raylib_web(void);
 int generate_vim_project_file(void);
+int generate_nob_project_file(void);
+int load_project_file(void);
 
 char _project_root_path[OS_PATH_LEN];
 Str8 project_root_path;
@@ -94,78 +93,37 @@ int build_raylib(void) {
 
   Nob_Cmd cmd = {0};
 
+  ASSERT(nob_mkdir_if_not_exists("./third_party/raylib/build"));
+
   ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
+
+  // web
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  os_move_file(str8_lit("./libraylib.web.a"), str8_lit("./build/libraylib.web.a"));
 
   nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
-  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
-
+  // static
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
-  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
-
-  ASSERT(os_set_current_dir(project_root_path));
-
-  return 1;
-}
-
-int clean_raylib(void) {
-  nob_log(NOB_INFO, "cleaning raylib files");
-
-  Nob_Cmd cmd = {0};
-
-  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
+  os_move_file(str8_lit("./libraylib.a"), str8_lit("./build/libraylib.a"));
 
   nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  ASSERT(os_set_current_dir(project_root_path));
-
-  return 1;
-}
-
-int build_raylib_static(void) {
-  nob_log(NOB_INFO, "building raylib static");
-
-  Nob_Cmd cmd = {0};
-
-  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
-
-  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
-  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
-
-  ASSERT(os_set_current_dir(project_root_path));
-
-  return 1;
-}
-
-int build_raylib_shared(void) {
-  nob_log(NOB_INFO, "building raylib shared");
-
-  Nob_Cmd cmd = {0};
-
-  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
-
+  // shared
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  ASSERT(os_set_current_dir(project_root_path));
+  os_move_file(str8_lit("./libraylib.so.5.5.0"), str8_lit("./build/libraylib.so.5.5.0"));
+  os_move_file(str8_lit("./libraylib.so.550"), str8_lit("./build/libraylib.so.550"));
+  os_move_file(str8_lit("./libraylib.so"), str8_lit("./build/libraylib.so"));
 
-  return 1;
-}
-
-int build_raylib_web(void) {
-  nob_log(NOB_INFO, "building raylib web");
-
-  Nob_Cmd cmd = {0};
-
-  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
-
-  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
+  nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   ASSERT(os_set_current_dir(project_root_path));
@@ -190,7 +148,7 @@ int run_metaprogram(void) {
   nob_log(NOB_INFO, "running metaprogram");
 
   Nob_Cmd cmd = {0};
-  nob_cmd_append(&cmd, "./metaprogram");
+  nob_cmd_append(&cmd, scratch_push_str8f("%S/metaprogram", project_root_path).s);
 
   if(!nob_cmd_run_sync(cmd)) return 0;
 
@@ -218,7 +176,10 @@ int build_static(void) {
 
   nob_log(NOB_INFO, "building in static mode");
 
-  nob_cmd_append(&cmd, CC, DEV_FLAGS, "static_main.c", RAYLIB_STATIC_LINK_OPTIONS, "-o", EXE, STATIC_BUILD_LDFLAGS);
+  ASSERT(nob_mkdir_if_not_exists("build"));
+  ASSERT(nob_mkdir_if_not_exists("./build/static"));
+
+  nob_cmd_append(&cmd, CC, DEV_FLAGS, "static_main.c", RAYLIB_STATIC_LINK_OPTIONS, "-o", "./build/static/"EXE, STATIC_BUILD_LDFLAGS);
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
@@ -229,7 +190,10 @@ int build_release(void) {
 
   nob_log(NOB_INFO, "building in release mode");
 
-  nob_cmd_append(&cmd, CC, RELEASE_FLAGS, "static_main.c", RAYLIB_STATIC_LINK_OPTIONS, "-o", EXE, STATIC_BUILD_LDFLAGS);
+  ASSERT(nob_mkdir_if_not_exists("build"));
+  ASSERT(nob_mkdir_if_not_exists("./build/release"));
+
+  nob_cmd_append(&cmd, CC, RELEASE_FLAGS, "static_main.c", RAYLIB_STATIC_LINK_OPTIONS, "-o", "./build/release/"EXE, STATIC_BUILD_LDFLAGS);
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
@@ -253,7 +217,7 @@ int build_wasm(void) {
 int build_itch(void) {
   Nob_Cmd cmd = {0};
 
-  nob_log(NOB_INFO, "building for WASM");
+  nob_log(NOB_INFO, "building for itch.io");
 
   ASSERT(nob_mkdir_if_not_exists("build"));
   ASSERT(nob_mkdir_if_not_exists("./build/itch"));
@@ -325,37 +289,93 @@ char project_file[] =
 int generate_vim_project_file(void) {
   nob_log(NOB_INFO, "generating vim project file");
   Str8 path_str = scratch_push_str8f("%s/.project.vim", project_root_path);
-  nob_write_entire_file((char*)path_str.s, project_file, memory_strlen(project_file));
+  ASSERT(nob_write_entire_file((char*)path_str.s, project_file, memory_strlen(project_file)));
   return 1;
 }
 
+int generate_nob_project_file(void) {
+  nob_log(NOB_INFO, "generating nob project file");
+  Str8 root_path = scratch_push_str8f("root = %S\n", os_get_current_dir());
+
+  ASSERT(nob_write_entire_file(".project.nob", root_path.s, root_path.len));
+
+  return 1;
+}
+
+int bootstrap_project(void) {
+  nob_log(NOB_INFO, "bootstrapping project");
+
+  generate_nob_project_file();
+  generate_vim_project_file();
+
+  if(!build_raylib()) return 1;
+  if(!build_metaprogram()) return 1;
+}
+
+// TODO make nob work in subdirs of the project dir
+int load_project_file(void) {
+  Nob_String_Builder sb = {0};
+
+  Str8 cur_dir = os_get_current_dir();
+
+  for(;;) {
+    if(!nob_read_entire_file(".project.nob", &sb)) {
+      if(!nob_set_current_dir("..")) {
+        nob_log(NOB_ERROR, "no .project.nob file found, please run bootstrap_project() before trying to build");
+        return 1;
+      }
+    } else {
+      os_set_current_dir(cur_dir);
+      break;
+    }
+  }
+
+  Nob_String_View sv = nob_sb_to_sv(sb);
+
+  for(size_t i = 0; i < sv.count; i++) {
+    if(sv.data[i] == '=') {
+      Nob_String_View before = { .count = i, .data = sv.data };
+      Nob_String_View after  = { .count = sv.count - (i+1), .data = sv.data + (i+1) };
+      before = nob_sv_trim(before);
+      after = nob_sv_trim(after);
+
+      if(nob_sv_eq(before, nob_sv_lit("root"))) {
+        project_root_path = (Str8){ .s = (u8*)after.data, .len = after.count };
+      } else {
+        nob_log(NOB_WARNING, "unknown option %s in .project.nob", before.data);
+      }
+
+    }
+  }
+
+  nob_log(NOB_INFO, "loaded .project.nob");
+
+  return 1;
+}
 
 int main(int argc, char **argv) {
 
   context_init();
 
-  { /* set project_root_path from argv[0] */
-    int exe_name_len = memory_strlen(argv[0]);
-    int i;
-    for(i = 0; i < exe_name_len - STRLEN("/nob"); i++) {
-      _project_root_path[i] = argv[0][i];
-    }
-    _project_root_path[i] = 0;
+#if 0
+  {
+    //generate_nob_project_file();
+    //bootstrap_project();
 
-    project_root_path = (Str8){ .s = (u8*)_project_root_path, .len = i };
+    NOB_GO_REBUILD_URSELF(argc, argv);
+
+    return 0;
   }
+#endif
 
-  os_set_current_dir(project_root_path);
+  load_project_file();
 
   NOB_GO_REBUILD_URSELF(argc, argv);
 
-  // TODO make a build dir for the raylib binary files
-  //clean_raylib();
+  ASSERT(os_set_current_dir(project_root_path));
+
   //if(!generate_vim_project_file()) return 1;
   //if(!build_raylib()) return 1;
-  //if(!build_raylib_web()) return 1;
-  //if(!build_raylib_static()) return 1;
-  //if(!build_raylib_shared()) return 0;
   //if(!build_metaprogram()) return 1;
 
   run_metaprogram();

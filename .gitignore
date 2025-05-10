@@ -1,4 +1,5 @@
 etc/
+*.nob
 *.vim
 *.so
 *.so*
@@ -22,4 +23,5 @@ bullet_hell.html
 bullet_hell.wasm
 bullet_hell.data
 build/
+third_party/raylib/build/
 screenshot*.png

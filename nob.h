@@ -592,6 +592,8 @@ typedef struct {
   const char *data;
 } Nob_String_View;
 
+#define nob_sv_lit(s) ((Nob_String_View){ .count = sizeof(s)-1, .data = s })
+
 const char *nob_temp_sv_to_cstr(Nob_String_View sv);
 
 Nob_String_View nob_sv_chop_by_delim(Nob_String_View *sv, char delim);

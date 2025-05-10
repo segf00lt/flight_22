@@ -536,6 +536,7 @@ STBSP__PUBLICDEF int STB_SPRINTF_DECORATE(vsprintfcb)(STBSP_SPRINTFCB *callback,
          if (f[0] == 'h')
             ++f;  // QUARTERWIDTH
          break;
+      // TODO(jfd) account for WASMs lack of full 64bit support
       // are we 64-bit (unix style)
       case 'l':
          fl |= ((sizeof(long) == 8) ? STBSP__INTMAX : 0);
