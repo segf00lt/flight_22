@@ -7,8 +7,8 @@
 
 #include "sprite_data.c"
 
-//#include "particle_data.c"
-//#include "particle_atlas.c"
+//#include "sound_data.c"
+
 
 
 /*
@@ -195,10 +195,10 @@ Entity* spawn_player(Game *gp) {
     ENTITY_FLAG_DYNAMICS |
     ENTITY_FLAG_APPLY_FRICTION |
     ENTITY_FLAG_HAS_SPRITE |
-    ENTITY_FLAG_CLAMP_POS_TO_SCREEN |
     ENTITY_FLAG_HAS_BULLET_EMITTER |
     ENTITY_FLAG_RECEIVE_COLLISION |
     ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
+    //ENTITY_FLAG_EMIT_DEATH_PARTICLES |
     0;
 
   ep->update_order = ENTITY_ORDER_LAST;
@@ -207,14 +207,16 @@ Entity* spawn_player(Game *gp) {
   ep->look_dir = PLAYER_LOOK_DIR;
   ep->pos = PLAYER_INITIAL_POS;
 
-  ep->health = 100;
+  ep->health = PLAYER_HEALTH;
+
+  ep->hurt_sound = gp->avenger_hurt_sound;
 
   ep->sprite = SPRITE_AVENGER;
   ep->sprite_tint = WHITE;
-  ep->effect_tint = BLOOD;
   ep->sprite_scale = PLAYER_SPRITE_SCALE;
 
-  ep->effect_tint_period = 0.5f;
+  // TODO
+  //ep->death_particle_emitter = PARTICLE_EMITTER_BIG_PLANE_EXPLOSION;
 
   ep->bullet_emitter.kind = BULLET_EMITTER_KIND_AVENGER;
   ep->bullet_emitter.flags =
@@ -228,7 +230,7 @@ Entity* spawn_player(Game *gp) {
   return ep;
 }
 
-Entity* spawn_crab_leader(Game *gp) {
+Entity* spawn_leader(Game *gp) {
   Entity *ep = entity_spawn(gp);
 
   ep->kind = ENTITY_KIND_LEADER;
@@ -290,6 +292,107 @@ Entity* spawn_crab(Game *gp) {
 
   ep->radius = CRAB_BOUNDS_RADIUS;
 
+  ep->hurt_sound = gp->crab_hurt_sound;
+
+  return ep;
+}
+
+Entity* spawn_health_pack(Game *gp) {
+
+  Entity *ep = entity_spawn(gp);
+
+  ep->kind = ENTITY_KIND_HEALTH_PACK;
+
+  ep->flags =
+    ENTITY_FLAG_DYNAMICS |
+    ENTITY_FLAG_APPLY_COLLISION |
+    ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
+    ENTITY_FLAG_APPLY_FRICTION |
+    ENTITY_FLAG_HAS_SPRITE |
+    ENTITY_FLAG_DIE_IF_EXIT_SCREEN |
+    ENTITY_FLAG_NOT_ON_SCREEN |
+    ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+    0;
+
+  ep->update_order = ENTITY_ORDER_FIRST;
+  ep->draw_order = ENTITY_ORDER_FIRST;
+
+  ep->pos = (Vector2){ .x = (float)GetRandomValue(0, WINDOW_WIDTH), . y = -0.4*WINDOW_HEIGHT }; 
+  ep->vel = (Vector2){ .y = (float)GetRandomValue(850, 880), };
+  ep->friction = 0.45f;
+
+  ep->collide_proc = collide_with_health_pack;
+
+  ep->death_particle_emitter = PARTICLE_EMITTER_GREEN_PUFF;
+
+  ep->apply_collision_mask =
+    ENTITY_KIND_MASK_PLAYER |
+    0;
+
+  ep->bounds_color = GREEN;
+  ep->sprite = SPRITE_HEALTH;
+  ep->sprite_scale = 4.0f;
+  ep->sprite_tint = WHITE;
+
+  ep->radius = 20;
+
+  return ep;
+}
+
+Entity* spawn_bomb_pack(Game *gp) {
+
+  Entity *ep = entity_spawn(gp);
+
+  ep->kind = ENTITY_KIND_BOMB_PACK;
+
+  ep->flags =
+    ENTITY_FLAG_DYNAMICS |
+    ENTITY_FLAG_APPLY_COLLISION |
+    ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
+    ENTITY_FLAG_APPLY_FRICTION |
+    ENTITY_FLAG_HAS_SPRITE |
+    ENTITY_FLAG_DIE_IF_EXIT_SCREEN |
+    ENTITY_FLAG_NOT_ON_SCREEN |
+    //ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+    0;
+
+  ep->update_order = ENTITY_ORDER_FIRST;
+  ep->draw_order = ENTITY_ORDER_FIRST;
+
+  ep->pos = (Vector2){ .x = (float)GetRandomValue(0, WINDOW_WIDTH), . y = -0.4*WINDOW_HEIGHT }; 
+  ep->vel = (Vector2){ .y = (float)GetRandomValue(850, 880), };
+  ep->friction = 0.45f;
+
+  ep->collide_proc = collide_with_bomb_pack;
+
+  // TODO brown puff
+  //ep->death_particle_emitter = PARTICLE_EMITTER_GREEN_PUFF;
+
+  ep->apply_collision_mask =
+    ENTITY_KIND_MASK_PLAYER |
+    0;
+
+  ep->bounds_color = GREEN;
+  ep->sprite = SPRITE_BOOM;
+  ep->sprite_scale = 2.0f;
+  ep->sprite_tint = WHITE;
+
+  ep->radius = 20;
+
+  return ep;
+}
+
+Entity* spawn_double_bullets_pack(Game *gp) {
+
+  Entity *ep = entity_spawn(gp);
+
+  return ep;
+}
+
+Entity* spawn_triple_bullets_pack(Game *gp) {
+
+  Entity *ep = entity_spawn(gp);
+
   return ep;
 }
 
@@ -318,9 +421,9 @@ Entity* spawn_crab_follow(Game *gp) {
 
   ep->health = CRAB_HEALTH;
 
-  //ASSERT(cur_crab_leader_handle.uid && cur_crab_leader_handle.ep);
+  //ASSERT(cur_leader_handle.uid && cur_leader_handle.ep);
 
-  //ep->leader_handle = cur_crab_leader_handle;
+  //ep->leader_handle = cur_leader_handle;
 
   //ep->sprite = SPRITE_AVENGER;
   //ep->sprite_tint = WHITE;
@@ -344,14 +447,51 @@ Entity* spawn_crab_follow(Game *gp) {
 }
 #endif
 
-Entity* spawn_fish(Game *gp) {
-  UNIMPLEMENTED;
-  return 0;
+void collide_with_health_pack(Game *gp, Entity *a, Entity *b) {
+
+  ASSERT(a->kind == ENTITY_KIND_HEALTH_PACK);
+  ASSERT(b->kind == ENTITY_KIND_PLAYER);
+
+  if(b->health < PLAYER_HEALTH) {
+    b->health += 1;
+  }
+
+  b->effect_tint = GREEN;
+
+  b->flags |= ENTITY_FLAG_APPLY_EFFECT_TINT;
+
+  b->effect_tint_period = 0.7f;
+  b->effect_tint_timer_vel = 1.0f;
+
+  b->effect_tint_timer = b->effect_tint_period;
+
+  SetSoundPan(gp->health_pickup_sound, Normalize(a->pos.x, WINDOW_WIDTH, 0));
+  SetSoundVolume(gp->health_pickup_sound, 0.3);
+  PlaySound(gp->health_pickup_sound);
+
 }
 
-Entity* spawn_stingray(Game *gp) {
-  UNIMPLEMENTED;
-  return 0;
+void collide_with_bomb_pack(Game *gp, Entity *a, Entity *b) {
+  //TODO("bomb pack");
+
+  if(gp->bomb_count < MAX_BOMBS) {
+    gp->bomb_count += 1;
+  }
+
+}
+
+void collide_with_double_bullets_pack(Game *gp, Entity *a, Entity *b) {
+  TODO("double bullets");
+
+  b->bullet_emitter.kind = BULLET_EMITTER_KIND_AVENGER_DOUBLE_TROUBLE;
+
+}
+
+void collide_with_triple_bullets_pack(Game *gp, Entity *a, Entity *b) {
+  TODO("triple bullets");
+
+  b->bullet_emitter.kind = BULLET_EMITTER_KIND_AVENGER_TRIPLE_THREAT;
+
 }
 
 force_inline float get_random_float(float min, float max, int steps) {
@@ -389,6 +529,7 @@ void entity_emit_particles(Game *gp, Entity *ep) {
           p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1600));
 
           p->radius = get_random_float(1.0f, 4.0f, 8);
+          p->shrink = (0.5*p->radius)/p->lifetime;
 
           p->friction = (float)GetRandomValue(0, 15);
 
@@ -400,28 +541,30 @@ void entity_emit_particles(Game *gp, Entity *ep) {
       } break;
     case PARTICLE_EMITTER_GREEN_PUFF:
       {
-        n_particles = GetRandomValue(120, 150);
+        n_particles = GetRandomValue(10, 15);
         ASSERT(n_particles <= MAX_PARTICLES);
 
         for(int i = 0; i < n_particles; i++) {
           Particle *p = buf + i;
           *p = (Particle){0};
 
-          p->lifetime = get_random_float(TARGET_FRAME_TIME * 10, TARGET_FRAME_TIME * 20, 10);
+          p->lifetime = get_random_float(TARGET_FRAME_TIME * 30, TARGET_FRAME_TIME * 40, 10);
 
           p->pos = ep->pos;
           p->vel =
             Vector2Rotate(Vector2Normalize(Vector2Negate(ep->vel)),
                 get_random_float(0, 2*PI, 150));
 
-          p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1600));
+          p->vel = Vector2Scale(p->vel, (float)GetRandomValue(80, 90));
 
-          p->radius = get_random_float(1.0f, 2.5f, 5);
+          p->radius = get_random_float(2.9f, 3.5f, 4);
+          p->shrink = (0.36*p->radius)/p->lifetime;
 
-          p->friction = (float)GetRandomValue(0, 15);
+
+          p->friction = get_random_float(0.05f, 0.1f, 4);
 
           p->begin_tint = (Color){ 0, 255, 0, 255 };
-          p->end_tint = ColorAlpha(p->begin_tint, 0.5);
+          p->end_tint = ColorAlpha(p->begin_tint, 0.8);
 
         }
 
@@ -472,19 +615,49 @@ void entity_emit_particles(Game *gp, Entity *ep) {
 
           p->vel = Vector2Scale(p->vel, (float)GetRandomValue(500, 600));
 
-          p->radius = get_random_float(1.0f, 2.2f, 3);
+          p->radius = get_random_float(2.7f, 3.2f, 3);
+          p->shrink = (0.7*p->radius)/p->lifetime;
 
           p->friction = (float)GetRandomValue(0, 2);
 
           p->begin_tint = BLOOD;
-          p->end_tint = ColorAlpha(BLOOD, 0.5f);
+          p->end_tint = ColorAlpha(BLOOD, 0.75f);
+
+        }
+
+      } break;
+    case PARTICLE_EMITTER_PURPLE_SPARKS:
+      {
+        n_particles = GetRandomValue(30, 35);
+        ASSERT(n_particles <= MAX_PARTICLES);
+
+        for(int i = 0; i < n_particles; i++) {
+          Particle *p = buf + i;
+          *p = (Particle){0};
+
+          p->lifetime = get_random_float(TARGET_FRAME_TIME * 10, TARGET_FRAME_TIME * 20, 10);
+
+          p->pos = ep->pos;
+          p->vel =
+            Vector2Rotate(Vector2Normalize(Vector2Negate(ep->vel)),
+                get_random_float(0.0f, 2*PI, 200));
+
+          p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1800));
+
+          p->radius = get_random_float(3.2f, 4.5f, 4);
+          p->shrink = 12.3f;
+
+          p->friction = (float)GetRandomValue(0, 20);
+
+          p->begin_tint = CRAB_BULLET_SPRITE_TINT;
+          p->end_tint = ColorAlpha(p->begin_tint, 0.83);
 
         }
 
       } break;
     case PARTICLE_EMITTER_SPARKS:
       {
-        n_particles = GetRandomValue(30, 35);
+        n_particles = GetRandomValue(20, 25);
         ASSERT(n_particles <= MAX_PARTICLES);
 
         for(int i = 0; i < n_particles; i++) {
@@ -500,12 +673,13 @@ void entity_emit_particles(Game *gp, Entity *ep) {
 
           p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1800));
 
-          p->radius = get_random_float(1.5f, 2.2f, 4);
+          p->radius = get_random_float(2.0f, 3.2f, 4);
+          p->shrink = 12.3f;
 
           p->friction = (float)GetRandomValue(0, 20);
 
           p->begin_tint = (Color){ 255, 188, 3, 255 };
-          p->end_tint = ColorAlpha(p->begin_tint, 0.53);
+          p->end_tint = ColorAlpha(p->begin_tint, 0.83);
 
         }
 
@@ -528,12 +702,13 @@ void entity_emit_particles(Game *gp, Entity *ep) {
 
           p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1800));
 
-          p->radius = get_random_float(1.0f, 1.2f, 4);
+          p->radius = get_random_float(1.6f, 2.2f, 4);
+          p->shrink = 12.3f;
 
           p->friction = (float)GetRandomValue(0, 20);
 
           p->begin_tint = BLOOD;
-          p->end_tint = ColorAlpha(BLOOD, 0.1);
+          p->end_tint = ColorAlpha(BLOOD, 0.85);
 
         }
 
@@ -561,14 +736,15 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
       case BULLET_EMITTER_KIND_AVENGER:
         {
 
-          emitter->bullet_collision_mask = PLAYER_APPLY_COLLISION_MASK;
-          emitter->cooldown_period[0] = AVENGER_NORMAL_FIRE_COOLDOWN;
+          emitter->bullet_collision_mask = AVENGER_BULLET_APPLY_COLLISION_MASK;
+          emitter->cooldown_period[0] = 0.04f;
           emitter->active_rings_mask = 0x1;
 
           emitter->shots[0] = 1;
           {
             Bullet_emitter_ring *ring = &emitter->rings[0];
 
+            ring->sound = gp->avenger_bullet_sound;
             ring->spin_vel = 0.0f;
             ring->radius = 60.0f;
             ring->n_arms = 1;
@@ -576,8 +752,9 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
             ring->n_bullets = 1;
             ring->bullet_arm_width = 0.0f;
             ring->bullet_radius = 15;
-            ring->bullet_vel = AVENGER_NORMAL_BULLET_VELOCITY;
-            ring->bullet_damage = AVENGER_NORMAL_BULLET_DAMAGE;
+            ring->bullet_vel = 1900;
+            ring->bullet_friction = 0.1f;
+            ring->bullet_damage = 5;
             ring->bullet_bounds_color = GREEN;
             ring->bullet_sprite = SPRITE_AVENGER_BULLET;
             ring->bullet_sprite_tint = WHITE;
@@ -585,6 +762,7 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
             ring->bullet_flags =
               ENTITY_FLAG_HAS_SPRITE |
               ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+              ENTITY_FLAG_APPLY_FRICTION |
               0;
 
             ring->bullet_death_particle_emitter = PARTICLE_EMITTER_SPARKS;
@@ -682,11 +860,17 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
             ring->bullet_curve = 0.01f;
             ring->bullet_damage = CRAB_NORMAL_BULLET_DAMAGE;
             ring->bullet_bounds_color = GREEN;
-            ring->bullet_fill_color = RAYWHITE;
+            ring->bullet_sprite = SPRITE_BULLETS;
+            ring->bullet_sprite_scale = CRAB_BULLET_SPRITE_SCALE;
+            ring->bullet_sprite_tint = CRAB_BULLET_SPRITE_TINT;
             ring->bullet_flags =
-              ENTITY_FLAG_FILL_BOUNDS |
+              ENTITY_FLAG_HAS_SPRITE |
               ENTITY_FLAG_DYNAMICS_HAS_CURVE |
+              ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+              ENTITY_FLAG_APPLY_FRICTION |
               0;
+
+            ring->bullet_death_particle_emitter = PARTICLE_EMITTER_PURPLE_SPARKS;
           }
 
         } break;
@@ -716,11 +900,16 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
             ring->bullet_vel = 500;
             ring->bullet_damage = CRAB_NORMAL_BULLET_DAMAGE;
             ring->bullet_bounds_color = GREEN;
-            ring->bullet_fill_color = RAYWHITE;
+            ring->bullet_sprite = SPRITE_BULLETS;
+            ring->bullet_sprite_scale = CRAB_BULLET_SPRITE_SCALE;
+            ring->bullet_sprite_tint = CRAB_BULLET_SPRITE_TINT;
             ring->bullet_flags =
-              ENTITY_FLAG_FILL_BOUNDS |
+              ENTITY_FLAG_HAS_SPRITE |
+              ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+              ENTITY_FLAG_APPLY_FRICTION |
               0;
 
+            ring->bullet_death_particle_emitter = PARTICLE_EMITTER_PURPLE_SPARKS;
           }
 
         } break;
@@ -755,11 +944,72 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
             ring->bullet_vel = 500;
             ring->bullet_damage = CRAB_NORMAL_BULLET_DAMAGE;
             ring->bullet_bounds_color = GREEN;
-            ring->bullet_fill_color = RAYWHITE;
+            ring->bullet_sprite = SPRITE_BULLETS;
+            ring->bullet_sprite_scale = CRAB_BULLET_SPRITE_SCALE;
+            ring->bullet_sprite_tint = CRAB_BULLET_SPRITE_TINT;
             ring->bullet_flags =
-              ENTITY_FLAG_FILL_BOUNDS |
+              ENTITY_FLAG_HAS_SPRITE |
+              ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+              ENTITY_FLAG_APPLY_FRICTION |
               0;
 
+            ring->bullet_death_particle_emitter = PARTICLE_EMITTER_PURPLE_SPARKS;
+
+          }
+
+        } break;
+      case BULLET_EMITTER_KIND_CRAB_V_SHOT:
+        {
+
+          emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
+          emitter->active_rings_mask = 0x1;
+
+          emitter->rings[0].flags |=
+            BULLET_EMITTER_RING_FLAG_LOOK_AT_PLAYER |
+            BULLET_EMITTER_RING_FLAG_USE_POINT_BAG |
+            0;
+
+          emitter->cooldown_period[0] = 0.0f;
+          emitter->shots[0] = 1;
+
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[0];
+
+            ring->spin_vel = 0.0f;
+            ring->radius = 60.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 0;
+
+            float radius = CRAB_NORMAL_BULLET_BOUNDS_RADIUS;
+
+            Vector2 point_bag[] = {
+              { -2.0*radius, 0 },
+              { -1.2*radius, 2.2*radius },
+              {  0, 4.4*radius },
+              {  1.2*radius, 2.2*radius },
+              {  2.0*radius, 0 },
+            };
+
+            ring->n_bullets = ARRLEN(point_bag);
+            memory_copy_array(ring->bullet_point_bag, point_bag);
+
+            ring->bullet_arm_width = 0.0f;
+            ring->bullet_radius = radius;
+            //ring->bullet_vel = 500;
+            ring->bullet_vel = 800;
+            ring->bullet_friction = 0.47f;
+            ring->bullet_damage = CRAB_NORMAL_BULLET_DAMAGE;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_sprite = SPRITE_BULLETS;
+            ring->bullet_sprite_scale = CRAB_BULLET_SPRITE_SCALE;
+            ring->bullet_sprite_tint = CRAB_BULLET_SPRITE_TINT;
+            ring->bullet_flags =
+              ENTITY_FLAG_HAS_SPRITE |
+              ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+              ENTITY_FLAG_APPLY_FRICTION |
+              0;
+
+            ring->bullet_death_particle_emitter = PARTICLE_EMITTER_PURPLE_SPARKS;
           }
 
         } break;
@@ -853,32 +1103,38 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
       Vector2 arm_dir;
       float arms_occupy_circle_sector_angle;
       float arm_step_angle;
+      Vector2 look_at_player_dir = {0};
 
       if(ring->flags & BULLET_EMITTER_RING_FLAG_LOOK_AT_PLAYER) {
 
         Entity *player = entity_from_handle(gp->player_handle);
         ASSERT(player);
 
-        ring->dir = Vector2Normalize(Vector2Subtract(player->pos, ep->pos));
+        look_at_player_dir = Vector2Normalize(Vector2Subtract(player->pos, ep->pos));
+        ring->dir = look_at_player_dir;
 
       } else {
         ring->dir = ep->look_dir;
       }
 
+      float arm_angle;
+      Matrix arm_transform;
+
       if(ring->n_arms == 1) {
         arms_occupy_circle_sector_angle = 0;
         arm_step_angle = 0;
-        arm_dir = Vector2Rotate(ring->dir, ring->spin_cur_angle + ring->spin_start_angle);
+        arm_angle = ring->spin_cur_angle + ring->spin_start_angle;
+        arm_transform = MatrixRotateZ(arm_angle);
+        arm_dir = Vector2Transform(ring->dir, arm_transform);
       } else {
         ASSERT(ring->arms_occupy_circle_sector_percent > 0);
 
         arms_occupy_circle_sector_angle =
           (2*PI) * ring->arms_occupy_circle_sector_percent;
         arm_step_angle = arms_occupy_circle_sector_angle / (float)(ring->n_arms-1);
-        arm_dir =
-          Vector2Rotate(
-              ring->dir,
-              -0.5*arms_occupy_circle_sector_angle + ring->spin_cur_angle + ring->spin_start_angle);
+        arm_angle = -0.5*arms_occupy_circle_sector_angle + ring->spin_cur_angle + ring->spin_start_angle;
+        arm_transform = MatrixRotateZ(arm_angle);
+        arm_dir = Vector2Transform(ring->dir, arm_transform);
       }
 
       for(int arm_i = 0; arm_i < ring->n_arms; arm_i++) {
@@ -889,20 +1145,25 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
 
         if(ring->flags & BULLET_EMITTER_RING_FLAG_USE_POINT_BAG) {
 
-          // TODO test bullet point bag
-          TraceLog(LOG_WARNING, "flag USE_POINT_BAG is untested");
+          if(ring->flags & BULLET_EMITTER_RING_FLAG_LOOK_AT_PLAYER) {
+            Vector2 look_at_player_dir_perp =
+            {
+              .x = look_at_player_dir.y, .y = -look_at_player_dir.x,
+            };
+
+            Matrix look_transform =
+            {
+              .m0 = look_at_player_dir_perp.x, .m4 = look_at_player_dir.x,
+              .m1 = look_at_player_dir_perp.y, .m5 = look_at_player_dir.y,
+            };
+
+            arm_transform = MatrixMultiply(arm_transform, look_transform);
+          }
 
           ASSERT(ring->n_bullets < MAX_BULLETS_IN_BAG);
 
-          Vector2 arm_dir_perp = { arm_dir.y, -arm_dir.x };
-          Matrix m =
-          {
-            .m0 = arm_dir_perp.x, .m4 = arm_dir.x,
-            .m1 = arm_dir_perp.x, .m5 = arm_dir.x,
-          };
-
           for(int i = 0; i < ring->n_bullets; i++) {
-            positions[i] = Vector2Transform(ring->bullet_point_bag[i], m);
+            positions[i] = Vector2Add(bullet_pos, Vector2Transform(ring->bullet_point_bag[i], arm_transform));
           }
 
         } else {
@@ -939,6 +1200,14 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
           bullet->scalar_vel = ring->bullet_vel;
           bullet->vel = Vector2Scale(arm_dir, ring->bullet_vel);
 
+          if(IsSoundValid(ring->sound)) {
+            SetSoundPan(ring->sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+            SetSoundVolume(ring->sound, 0.2);
+            SetSoundPitch(ring->sound, get_random_float(0.98, 1.01, 4));
+            PlaySound(ring->sound);
+          }
+
+          bullet->friction = ring->bullet_friction;
           //bullet->vel = Vector2Add(bullet->vel, Vector2Scale(ring->dir, Vector2DotProduct(ring->dir, ep->vel)));
 
           bullet->curve = ring->bullet_curve;
@@ -952,9 +1221,12 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
           bullet->spawn_particle_emitter = ring->bullet_spawn_particle_emitter;
           bullet->death_particle_emitter = ring->bullet_death_particle_emitter;
 
-          bullet->pos = bullet_pos;
-
-          bullet_pos = Vector2Add(bullet_pos, step_dir);
+          if(ring->flags & BULLET_EMITTER_RING_FLAG_USE_POINT_BAG) {
+            bullet->pos = positions[bullet_i];
+          } else {
+            bullet->pos = bullet_pos;
+            bullet_pos = Vector2Add(bullet_pos, step_dir);
+          }
 
         } /* bullet loop */
 
@@ -1108,24 +1380,31 @@ void game_init(Game *gp) {
 
   game_load_assets(gp);
 
+  PlayMusicStream(gp->music);
+
   game_reset(gp);
 }
 
 void game_load_assets(Game *gp) {
   gp->font = GetFontDefault();
 
-  //Image particle_atlas = LoadImageFromMemory(".png", PARTICLE_ATLAS_DATA, sizeof(PARTICLE_ATLAS_DATA));
-  //ASSERT(IsImageValid(particle_atlas));
-  //gp->particle_atlas = LoadTextureFromImage(particle_atlas);
-
-  //gp->particle_atlas = LoadTexture("./sprites/particle_atlas.png");
   gp->render_texture = LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT);
   gp->background_texture = LoadTexture("./sprites/islands.png");
   gp->sprite_atlas = LoadTexture("./aseprite/atlas.png");
   SetTextureFilter(gp->sprite_atlas, TEXTURE_FILTER_POINT);
+
+  gp->avenger_bullet_sound = LoadSound("./sounds/avenger_bullet.wav");
+  gp->crab_hurt_sound      = LoadSound("./sounds/crab_hurt_sound.wav");
+  gp->health_pickup_sound  = LoadSound("./sounds/health_pickup.wav");
+  gp->avenger_hurt_sound   = LoadSound("./sounds/player_damage.wav");
+
+  gp->music = LoadMusicStream("./sounds/synthwave.wav");
+
 }
 
 void game_unload_assets(Game *gp) {
+  UnloadSound(gp->avenger_bullet_sound);
+
   UnloadRenderTexture(gp->render_texture);
   UnloadTexture(gp->sprite_atlas);
   UnloadTexture(gp->background_texture);
@@ -1139,7 +1418,7 @@ void game_reset(Game *gp) {
   gp->flags = 0;
 
 #ifdef DEBUG
-  gp->debug_flags |= GAME_DEBUG_FLAG_HOT_RELOAD;
+  gp->debug_flags = GAME_DEBUG_FLAG_HOT_RELOAD;
 #endif
 
   gp->entity_free_list = 0;
@@ -1165,6 +1444,8 @@ void game_reset(Game *gp) {
   gp->wave = 0;
 
   gp->score = 0;
+
+  SeekMusicStream(gp->music, 0);
 
 }
 
@@ -1199,7 +1480,7 @@ void game_main_loop(Game *gp) {
               const float strafe_speed = 300;
 
               {
-                Entity *leader = spawn_crab_leader(gp);
+                Entity *leader = spawn_leader(gp);
                 Entity_handle leader_handle = handle_from_entity(leader);
                 leader->child_list = push_entity_list(gp);
                 leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
@@ -1233,7 +1514,7 @@ void game_main_loop(Game *gp) {
               }
 
               {
-                Entity *leader = spawn_crab_leader(gp);
+                Entity *leader = spawn_leader(gp);
                 Entity_handle leader_handle = handle_from_entity(leader);
                 leader->child_list = push_entity_list(gp);
                 leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
@@ -1278,13 +1559,12 @@ void game_main_loop(Game *gp) {
 
             if(gp->phase.check_if_finished == 0) {
               gp->phase.check_if_finished = 1;
-              gp->phase.timer[0] = 2.0f;
 
               const int crabs_per_row = 2;
               const float strafe_speed = 300;
 
               {
-                Entity *leader = spawn_crab_leader(gp);
+                Entity *leader = spawn_leader(gp);
                 Entity_handle leader_handle = handle_from_entity(leader);
                 leader->child_list = push_entity_list(gp);
                 leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
@@ -1318,7 +1598,7 @@ void game_main_loop(Game *gp) {
               }
 
               {
-                Entity *leader = spawn_crab_leader(gp);
+                Entity *leader = spawn_leader(gp);
                 Entity_handle leader_handle = handle_from_entity(leader);
                 leader->child_list = push_entity_list(gp);
                 leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
@@ -1354,12 +1634,7 @@ void game_main_loop(Game *gp) {
             } else {
               if(gp->live_enemies == 0) {
 
-                if(gp->phase.timer[0] < 0) {
-                  gp->phase.timer[0] = 0;
-                  goto phase_end;
-                } else {
-                  gp->phase.timer[0] -= gp->timestep;
-                }
+                goto phase_end;
 
               }
             }
@@ -1374,7 +1649,7 @@ void game_main_loop(Game *gp) {
 
             const float FIRST_GROUP_DELAY  = 1.0f;
             const float SECOND_GROUP_DELAY = 2.4f;
-            const float THIRD_GROUP_DELAY  = 1.8f;
+            const float THIRD_GROUP_DELAY  = 3.15f;
             const float leader_fall_speed = 1600;
 
             f32 *first_enemy_group_spawn_delay = &gp->phase.timer[0];
@@ -1406,7 +1681,7 @@ void game_main_loop(Game *gp) {
 
                   gp->phase.flags |= SPAWNED_FIRST_GROUP;
 
-                  Entity *leader = spawn_crab_leader(gp);
+                  Entity *leader = spawn_leader(gp);
                   Entity_handle leader_handle = handle_from_entity(leader);
 
                   leader->look_dir = (Vector2){ 0, 1 };
@@ -1450,7 +1725,7 @@ void game_main_loop(Game *gp) {
 
                   gp->phase.flags |= SPAWNED_SECOND_GROUP;
 
-                  Entity *leader = spawn_crab_leader(gp);
+                  Entity *leader = spawn_leader(gp);
                   Entity_handle leader_handle = handle_from_entity(leader);
 
                   leader->look_dir = (Vector2){ 0, 1 };
@@ -1493,7 +1768,7 @@ void game_main_loop(Game *gp) {
 
                   gp->phase.flags |= SPAWNED_THIRD_GROUP;
 
-                  Entity *leader = spawn_crab_leader(gp);
+                  Entity *leader = spawn_leader(gp);
                   Entity_handle leader_handle = handle_from_entity(leader);
 
                   leader->look_dir = (Vector2){ 0, 1 };
@@ -1539,11 +1814,11 @@ void game_main_loop(Game *gp) {
           } break;
         case 3:
           {
-            const int SNAKE_ENEMIES_COUNT = 42;
+            const int SNAKE_ENEMIES_COUNT = 32;
             const Vector2 INITIAL_POS = { .x = WINDOW_WIDTH * 0.2f, .y = WINDOW_HEIGHT * 0.2f };
             const float ENEMY_SPAWN_DELAY = 0.6f;
             const float SECOND_GROUP_DELAY = 2.6f;
-            const float THIRD_GROUP_DELAY = 2.6f;
+            const float THIRD_GROUP_DELAY = 2.95f;
             const float crab_snake_speed = 350.0f;
 
             const u32 CREATED_WAYPOINTS    = 1u<<0;
@@ -1553,6 +1828,7 @@ void game_main_loop(Game *gp) {
             f32 *enemy_snake_spawn_timer = &gp->phase.timer[0];
             f32 *second_enemy_group_spawn_delay = &gp->phase.timer[1];
             f32 *third_enemy_group_spawn_delay = &gp->phase.timer[2];
+            s32 *enemy_snake_count = &gp->phase.accumulator[0];
 
 
             if(!(gp->phase.flags & CREATED_WAYPOINTS)) {
@@ -1583,7 +1859,6 @@ void game_main_loop(Game *gp) {
               ASSERT(waypoints);
 
               if(gp->phase.check_if_finished) {
-                gp->phase.accumulator = 0;
 
                 if(gp->live_enemies == 0) {
                   goto phase_end;
@@ -1591,13 +1866,14 @@ void game_main_loop(Game *gp) {
 
               } else {
 
-                if(gp->phase.accumulator >= SNAKE_ENEMIES_COUNT) {
+                if(*enemy_snake_count >= SNAKE_ENEMIES_COUNT) {
                   gp->phase.check_if_finished = 1;
                 } else {
 
                   if(*enemy_snake_spawn_timer >= ENEMY_SPAWN_DELAY) {
                     *enemy_snake_spawn_timer = 0;
-                    gp->phase.accumulator++;
+
+                    *enemy_snake_count += 1;
 
                     Entity *crab = spawn_crab(gp);
                     //crab->health = BIG_CRAB_HEALTH;
@@ -1608,7 +1884,7 @@ void game_main_loop(Game *gp) {
                     crab->scalar_vel = crab_snake_speed;
                     crab->move_control = ENTITY_MOVE_CONTROL_GOTO_WAYPOINT;
                     crab->shoot_control = ENTITY_SHOOT_CONTROL_PERIODIC_2;
-                    crab->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB_BATTLE_RIFLE;
+                    crab->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB_V_SHOT;
 
                   } else {
                     *enemy_snake_spawn_timer += gp->timestep;
@@ -1622,7 +1898,7 @@ void game_main_loop(Game *gp) {
                       { /* spawn_orbiting_crabs */
                         float leader_scalar_vel = 150;
 
-                        Entity *leader = spawn_crab_leader(gp);
+                        Entity *leader = spawn_leader(gp);
                         Entity_handle leader_handle = handle_from_entity(leader);
                         leader->child_list = push_entity_list(gp);
                         leader->vel = (Vector2){ .x = 1, .y = 0 };
@@ -1683,15 +1959,15 @@ void game_main_loop(Game *gp) {
                       { /* spawn_orbiting_crabs */
                         float leader_scalar_vel = 150;
 
-                        Entity *leader = spawn_crab_leader(gp);
+                        Entity *leader = spawn_leader(gp);
                         Entity_handle leader_handle = handle_from_entity(leader);
                         leader->child_list = push_entity_list(gp);
                         leader->vel = (Vector2){ .x = -1, .y = 0 };
                         leader->vel = Vector2Scale(Vector2Rotate(leader->vel, (-5.0f*PI)/6.0f), leader_scalar_vel);
                         leader->pos =
                           (Vector2){
-                            .x = WINDOW_WIDTH * -0.6,
-                            .y = WINDOW_HEIGHT * -0.63,
+                            .x = WINDOW_WIDTH * -0.87,
+                            .y = WINDOW_HEIGHT * -0.60,
                           };
 
                         int crab_count = 4;
@@ -1744,6 +2020,17 @@ void game_main_loop(Game *gp) {
           } break;
         case 4:
           {
+            const f32 SPAWN_HEALTH_DELAY = 1.0f;
+            f32 *spawn_health_timer = &gp->phase.timer[0];
+
+            if(*spawn_health_timer >= SPAWN_HEALTH_DELAY) {
+              *spawn_health_timer = 0;
+              spawn_health_pack(gp);
+              spawn_bomb_pack(gp);
+            } else {
+              *spawn_health_timer += gp->timestep;
+            }
+
           } break;
         case 5:
           {
@@ -1757,7 +2044,7 @@ void game_main_loop(Game *gp) {
               gp->phase.timer[0] = 1.0f;
 
               { /* spawn_orbiting_crabs */
-                Entity *leader = spawn_crab_leader(gp);
+                Entity *leader = spawn_leader(gp);
                 Entity_handle leader_handle = handle_from_entity(leader);
                 leader->child_list = push_entity_list(gp);
                 leader->move_control = ENTITY_MOVE_CONTROL_LEADER_HORIZONTAL_STRAFE;
@@ -1857,6 +2144,11 @@ end:
 
 void game_update_and_draw(Game *gp) {
 
+  if(IsMusicStreamPlaying(gp->music)) {
+    SetMusicVolume(gp->music, 0.10f);
+    UpdateMusicStream(gp->music);
+  }
+
 #ifdef DEBUG
   gp->timestep = Clamp(1.0f/50.0f, 1.0f/TARGET_FPS, GetFrameTime());
 #else
@@ -1937,8 +2229,14 @@ void game_update_and_draw(Game *gp) {
 
     if(gp->flags & GAME_FLAG_PAUSE) {
       if(gp->input_flags & INPUT_FLAG_ANY) {
+        ResumeSound(gp->avenger_bullet_sound);
+        ResumeSound(gp->crab_hurt_sound);
+        ResumeSound(gp->health_pickup_sound);
         gp->flags ^= GAME_FLAG_PAUSE;
       } else {
+        PauseSound(gp->avenger_bullet_sound);
+        PauseSound(gp->crab_hurt_sound);
+        PauseSound(gp->health_pickup_sound);
         goto update_end;
       }
     }
@@ -1954,20 +2252,24 @@ void game_update_and_draw(Game *gp) {
         UNREACHABLE;
       case GAME_STATE_NONE:
         {
-          //gp->next_state = GAME_STATE_DEBUG_SANDBOX;
-          //gp->next_state = GAME_STATE_MAIN_LOOP;
+          /* start settings */
+
+          //SeekMusicStream(gp->music, 300);
+          SetMusicVolume(gp->music, 1.0);
 
           gp->player = spawn_player(gp);
           gp->player_handle = handle_from_entity(gp->player);
 
           {
 #ifdef DEBUG
+
             gp->wave = 0;
-            gp->phase_index = 0;
+            gp->phase_index = 4;
 
             gp->debug_flags |=
               GAME_DEBUG_FLAG_DEBUG_UI |
-              GAME_DEBUG_FLAG_PLAYER_INVINCIBLE |
+              //GAME_DEBUG_FLAG_PLAYER_INVINCIBLE |
+              GAME_DEBUG_FLAG_SKIP_TRANSITIONS |
               0;
 #else
 
@@ -2000,6 +2302,12 @@ void game_update_and_draw(Game *gp) {
       case GAME_STATE_WAVE_TRANSITION:
         {
 
+#ifdef DEBUG
+          if(gp->debug_flags & GAME_DEBUG_FLAG_SKIP_TRANSITIONS) {
+            gp->next_state = GAME_STATE_MAIN_LOOP;
+            gp->flags &= ~GAME_FLAG_PLAYER_CANNOT_SHOOT;
+          }
+#endif
           if(gp->live_entities == 1) {
 
             ASSERT(entity_from_handle(gp->player_handle));
@@ -2142,6 +2450,36 @@ void game_update_and_draw(Game *gp) {
 #endif
 
                   ep->vel = (Vector2){0};
+                }
+
+                if(ep->received_damage > 0) {
+                  ep->effect_tint = BLOOD;
+
+                  if(ep->invulnerability_timer > 0) {
+                    ep->received_damage = 0;
+                  } else {
+                    ep->invulnerability_timer = 1.6f;
+                  }
+
+                }
+
+                if(ep->invulnerability_timer != 0) {
+                  if(ep->invulnerability_timer > 0) {
+                    ep->invulnerability_timer -= gp->timestep;
+
+                    if(ep->effect_tint_timer <= 0) {
+                      ep->flags |= ENTITY_FLAG_APPLY_EFFECT_TINT;
+
+                      ep->effect_tint_period = 0.1f;
+                      ep->effect_tint_timer_vel = 1.0f;
+
+                      ep->effect_tint_timer = ep->effect_tint_period;
+                    }
+
+                  } else {
+                    ep->invulnerability_timer = 0;
+                    ep->effect_tint = BLANK;
+                  }
                 }
 
                 if(gp->flags & GAME_FLAG_DO_THE_CRAB_WALK) {
@@ -2292,11 +2630,6 @@ void game_update_and_draw(Game *gp) {
               default:
                 UNREACHABLE;
               case ENTITY_SHOOT_CONTROL_NONE:
-#ifdef DEBUG
-                if(ep->kind != ENTITY_KIND_BULLET) {
-                  TraceLog(LOG_DEBUG, "entity of kind %s has no shoot control", Entity_kind_strings[ep->kind]);
-                }
-#endif
                 break;
               case ENTITY_SHOOT_CONTROL_ONCE:
                 {
@@ -2409,7 +2742,7 @@ void game_update_and_draw(Game *gp) {
 
           }
 
-          if(ep->flags & ENTITY_FLAG_CLAMP_POS_TO_SCREEN) {
+          if(ep->kind == ENTITY_KIND_PLAYER) {
             Vector2 pos_min = { ep->radius, ep->radius };
             Vector2 pos_max =
               Vector2Subtract(WINDOW_SIZE, pos_min);
@@ -2425,12 +2758,16 @@ void game_update_and_draw(Game *gp) {
             for(int i = 0; i < gp->entities_allocated; i++) {
               Entity *colliding = &gp->entities[i];
 
-              if(colliding->live) {
+              if(ep != colliding && colliding->live) {
 
                 if(entity_kind_in_mask(colliding->kind, ep->apply_collision_mask)) {
                   if(entity_check_collision(gp, ep, colliding)) {
                     applied_collision = 1;
                     colliding->received_collision = 1;
+
+                    if(ep->collide_proc) {
+                      ep->collide_proc(gp, ep, colliding);
+                    }
 
                     if(ep->flags & ENTITY_FLAG_APPLY_COLLISION_DAMAGE) {
                       colliding->received_damage += ep->damage_amount;
@@ -2483,18 +2820,30 @@ void game_update_and_draw(Game *gp) {
 
                   ep->received_damage = 0;
 
-                  ep->flags |= ENTITY_FLAG_APPLY_EFFECT_TINT;
-
-                  ep->effect_tint = BLOOD;
-
-                  if(ep->effect_tint_period == 0) {
-                    ep->effect_tint_period = 0.02f;
+                  if(IsSoundValid(ep->hurt_sound)) {
+                    SetSoundPan(ep->hurt_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+                    if(ep->kind == ENTITY_KIND_PLAYER) {
+                      SetSoundVolume(ep->hurt_sound, 0.17f);
+                    } else {
+                      SetSoundVolume(ep->hurt_sound, 0.5f);
+                    }
+                    PlaySound(ep->hurt_sound);
                   }
-                  if(ep->effect_tint_timer_vel == 0) {
-                    ep->effect_tint_timer_vel = 1.0f;
-                  }
 
-                  ep->effect_tint_timer = ep->effect_tint_period;
+                  if(ep->kind != ENTITY_KIND_PLAYER) {
+                    ep->flags |= ENTITY_FLAG_APPLY_EFFECT_TINT;
+
+                    ep->effect_tint = BLOOD;
+
+                    if(ep->effect_tint_period == 0) {
+                      ep->effect_tint_period = 0.02f;
+                    }
+                    if(ep->effect_tint_timer_vel == 0) {
+                      ep->effect_tint_timer_vel = 1.0f;
+                    }
+
+                    ep->effect_tint_timer = ep->effect_tint_period;
+                  }
 
                   if(ep->health <= 0) {
                     ep->flags |= ENTITY_FLAG_DIE_NOW;
@@ -2533,6 +2882,11 @@ void game_update_and_draw(Game *gp) {
             ep->flags &= ~ENTITY_FLAG_EMIT_SPAWN_PARTICLES;
 
             if(is_on_screen) {
+
+              if(IsSoundValid(ep->spawn_sound)) {
+                PlaySound(ep->spawn_sound);
+              }
+
               Particle_emitter tmp = ep->particle_emitter;
               ep->particle_emitter = ep->spawn_particle_emitter;
               entity_emit_particles(gp, ep);
@@ -2588,7 +2942,7 @@ entity_update_end:;
         p->vel = Vector2Subtract(p->vel, Vector2Scale(p->vel, p->friction*gp->timestep));
 
         if(p->radius > 0) {
-          p->radius -= (p->radius * 0.6f) * gp->timestep;
+          p->radius -= p->shrink * gp->timestep;
         }
 
         p->live += gp->timestep;
@@ -2695,7 +3049,13 @@ update_end:;
        */
 
       Str8 msg =
-        push_str8f(gp->frame_scratch, "SCORE: %i\nHEALTH: %i\n", gp->score, gp->player_health);
+        push_str8f(gp->frame_scratch,
+            "SCORE: %i\n"
+            "HEALTH: %i\n"
+            "BOMBS: %i\n",
+            gp->score,
+            gp->player_health,
+            gp->bomb_count);
 
       DrawTextEx(
           gp->font,

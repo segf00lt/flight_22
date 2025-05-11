@@ -58,6 +58,7 @@
   X(PLAYER_INVINCIBLE)         \
   X(DRAW_ALL_ENTITY_BOUNDS)    \
   X(SANDBOX_LOADED)            \
+  X(SKIP_TRANSITIONS)          \
 
 #define GAME_FLAGS         \
   X(PAUSE)                 \
@@ -79,7 +80,10 @@
   X(LEADER)                    \
   X(BULLET)                    \
   X(CRAB)                      \
-  X(SHIELD)                    \
+  X(HEALTH_PACK)               \
+  X(BOMB_PACK)                 \
+  X(DOUBLE_BULLETS_PACK)       \
+  X(TRIPLE_BULLETS_PACK)       \
   X(BOSS)                      \
 
 #define ENTITY_ORDERS   \
@@ -91,7 +95,6 @@
   X(DYNAMICS_HAS_CURVE)              \
   X(HAS_SPRITE)                      \
   X(APPLY_FRICTION)                  \
-  X(CLAMP_POS_TO_SCREEN)             \
   X(FILL_BOUNDS)                     \
   X(HAS_BULLET_EMITTER)              \
   X(NOT_ON_SCREEN)                   \
@@ -99,7 +102,6 @@
   X(DIE_IF_OFFSCREEN)                \
   X(DIE_IF_EXIT_SCREEN)              \
   X(DIE_IF_CHILD_LIST_EMPTY)         \
-  X(DIE_IF_ORPHANED)                 \
   X(DIE_NOW)                         \
   X(APPLY_COLLISION)                 \
   X(RECEIVE_COLLISION)               \
@@ -109,7 +111,6 @@
   X(DIE_ON_APPLY_COLLISION)          \
   X(HAS_PARTICLE_EMITTER)            \
   X(CHILDREN_ON_SCREEN)              \
-  X(HAS_SHIELDS)                     \
   X(EMIT_SPAWN_PARTICLES)            \
   X(EMIT_DEATH_PARTICLES)            \
   X(APPLY_EFFECT_TINT)               \
@@ -132,6 +133,7 @@
 
 #define PARTICLE_EMITTERS        \
   X(SPARKS)                      \
+  X(PURPLE_SPARKS)               \
   X(BLOOD_SPIT)                  \
   X(BLOOD_PUFF)                  \
   X(PINK_PUFF)                   \
@@ -141,12 +143,13 @@
 #define PARTICLE_FLAGS            \
 
 #define BULLET_EMITTER_KINDS         \
-  X(AVENGER_DOUBLE_BARREL)           \
+  X(AVENGER_DOUBLE_TROUBLE)          \
   X(AVENGER_TRIPLE_THREAT)           \
   X(AVENGER)                         \
   X(CRAB_BASIC)                      \
   X(CRAB_BATTLE_RIFLE)               \
   X(CRAB_RADIAL_BOOM)                \
+  X(CRAB_V_SHOT)                     \
 
 #define BULLET_EMITTER_FLAGS         \
 
@@ -189,7 +192,8 @@ typedef struct Entity_node Entity_node;
 typedef struct Entity_list Entity_list;
 typedef struct Waypoint Waypoint;
 typedef struct Waypoint_list Waypoint_list;
-typedef void (*Entity_modifier_proc)(Game*, Entity*);
+typedef void (*Waypoint_action_proc)(Game *gp, Entity *this_entity);
+typedef void (*Entity_collide_proc)(Game *gp, Entity *this_entity, Entity *other_entity);
 
 typedef enum Game_state {
 #define X(state) GAME_STATE_##state,
@@ -389,6 +393,7 @@ struct Particle {
   Vector2 pos;
   Vector2 vel;
   f32     radius; /* this says radius, but the particles are squares */
+  f32     shrink;
   f32     friction;
   Color   begin_tint;
   Color   end_tint;
@@ -413,6 +418,7 @@ struct Bullet_emitter_ring {
   f32          bullet_arm_width;
   f32          bullet_radius;
   f32          bullet_vel;
+  f32          bullet_friction;
   f32          bullet_curve;
   f32          bullet_curve_rolloff_vel;
   s32          bullet_damage;
@@ -427,6 +433,8 @@ struct Bullet_emitter_ring {
   f32    bullet_sprite_scale;
   f32    bullet_sprite_rotation;
   Color  bullet_sprite_tint;
+
+  Sound sound;
 
   f32 burst_cooldown;
   f32 burst_timer;
@@ -454,7 +462,7 @@ struct Waypoint_list {
   Waypoint *first;
   Waypoint *last;
   s64 count;
-  Entity_modifier_proc action;
+  Waypoint_action_proc action;
 };
 
 struct Waypoint {
@@ -550,15 +558,23 @@ struct Entity {
   Bullet_emitter bullet_emitter;
 
   Entity_kind_mask apply_collision_mask;
+  Entity_collide_proc collide_proc;
 
   Sprite sprite;
   f32    sprite_scale;
   f32    sprite_rotation;
   Color  sprite_tint;
+
   Color  effect_tint;
   f32    effect_tint_timer_vel;
   f32    effect_tint_period;
   f32    effect_tint_timer;
+
+  f32 invulnerability_timer;
+
+  Sound spawn_sound;
+  Sound hurt_sound;
+  Sound die_sound;
 
 };
 
@@ -613,7 +629,7 @@ struct Game {
     u32 flags;
     b16 check_if_finished;
     b16 set_timer;
-    s32 accumulator;
+    s32 accumulator[4];
     f32 timer[4];
     union {
       Waypoint_list *waypoints;
@@ -622,6 +638,7 @@ struct Game {
 
   s32 score;
   s32 player_health;
+  s32 bomb_count;
 
   f32  wave_timer;
   f32  wave_type_char_timer;
@@ -629,6 +646,13 @@ struct Game {
   s32  wave_banner_type_dir;
   s32  wave_banner_target_msg_len;
   Str8 wave_banner_msg;
+
+  Sound avenger_bullet_sound;
+  Sound crab_hurt_sound;
+  Sound health_pickup_sound;
+  Sound avenger_hurt_sound;
+
+  Music music;
 
 };
 
@@ -667,9 +691,16 @@ Entity_handle handle_from_entity(Entity *ep);
 
 Entity* spawn_player(Game *gp);
 Entity* spawn_crab(Game *gp);
-Entity* spawn_fish(Game *gp);
-Entity* spawn_stingray(Game *gp);
-Entity* spawn_crab_leader(Game *gp);
+Entity* spawn_health_pack(Game *gp);
+Entity* spawn_bomb_pack(Game *gp);
+Entity* spawn_double_bullets_pack(Game *gp);
+Entity* spawn_triple_bullets_pack(Game *gp);
+Entity* spawn_leader(Game *gp);
+
+void collide_with_health_pack(Game *gp, Entity *a, Entity *b);
+void collide_with_bomb_pack(Game *gp, Entity *a, Entity *b);
+void collide_with_double_bullets_pack(Game *gp, Entity *a, Entity *b);
+void collide_with_triple_bullets_pack(Game *gp, Entity *a, Entity *b);
 
 void entity_emit_particles(Game *gp, Entity *ep);
 
@@ -687,17 +718,20 @@ b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
  * entity settings
  */
 
+const s32 MAX_BOMBS = 3;
+
 const Vector2 PLAYER_INITIAL_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
 const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
 const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
-const s32 PLAYER_HEALTH = 100;
-const float PLAYER_BOUNDS_RADIUS = 22;
+const s32 PLAYER_HEALTH = 10;
+const float PLAYER_BOUNDS_RADIUS = 20;
 const float PLAYER_SPRITE_SCALE = 2.0f;
 const float PLAYER_ACCEL = 1.6e4;
 const float PLAYER_SLOW_FACTOR = 0.5f;
 const Color PLAYER_BOUNDS_COLOR = { 255, 0, 0, 255 };
-const Entity_kind_mask PLAYER_APPLY_COLLISION_MASK =
+const Entity_kind_mask AVENGER_BULLET_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_CRAB     |
+ENTITY_KIND_MASK_BOSS |
 0;
 
 const Entity_flags DEFAULT_BULLET_FLAGS =
@@ -720,9 +754,11 @@ const s32 BIG_CRAB_HEALTH = 25;
 const s32 LARGE_CRAB_HEALTH = 35;
 const s32 HUGE_CRAB_HEALTH = 30;
 
+const float CRAB_BULLET_SPRITE_SCALE = 3.0f;
+const Color CRAB_BULLET_SPRITE_TINT = { 239, 35, 236, 255 };
 const float CRAB_FOLLOW_LEADER_SPEED = 300;
 const float CRAB_BOUNDS_RADIUS = 40;
-const float CRAB_SPRITE_SCALE = 2.0f;
+const float CRAB_SPRITE_SCALE = 3.0f;
 const float CRAB_NORMAL_STRAFE_SPEED = 400;
 
 const float CRAB_ACCEL = 5.5e3;
@@ -741,7 +777,6 @@ const Vector2 ORBIT_ARM = { 0, -1 };
 
 const Entity_kind_mask ENEMY_KIND_MASK =
 ENTITY_KIND_MASK_CRAB |
-ENTITY_KIND_MASK_SHIELD |
 ENTITY_KIND_MASK_LEADER |
 0;
 

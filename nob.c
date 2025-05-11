@@ -17,7 +17,7 @@
 #define WASM_FLAGS "-Os", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-Wno-pthreads-mem-growth", "-D_UNITY_BUILD_"
 #define TARGET "bullet_hell.c"
 #define EXE "bullet_hell"
-#define LDFLAGS "-lraylib", "-lm"
+#define LDFLAGS "-lraylib", "-lm", "-lpthread"
 
 #if defined(OS_WINDOWS)
 #error "windows support not implemented"
@@ -160,10 +160,10 @@ int build_hot_reload(void) {
 
   nob_log(NOB_INFO, "building in hot reload mode");
 
-  nob_cmd_append(&cmd, CC, DEV_FLAGS, "-fPIC", "hot_reload_main.c", RAYLIB_DYNAMIC_LINK_OPTIONS, "-o", EXE, "-lm");
+  nob_cmd_append(&cmd, CC, DEV_FLAGS, "-fPIC", SHARED, "bullet_hell.c", RAYLIB_DYNAMIC_LINK_OPTIONS, "-o", GAME_MODULE, "-lm");
   Nob_Proc p1 = nob_cmd_run_async_and_reset(&cmd);
 
-  nob_cmd_append(&cmd, CC, DEV_FLAGS, "-fPIC", SHARED, "bullet_hell.c", RAYLIB_DYNAMIC_LINK_OPTIONS, "-o", GAME_MODULE, "-lm");
+  nob_cmd_append(&cmd, CC, DEV_FLAGS, "-fPIC", "hot_reload_main.c", RAYLIB_DYNAMIC_LINK_OPTIONS, "-o", EXE, "-lm");
 
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
   if(!nob_proc_wait(p1)) return 0;
@@ -226,7 +226,8 @@ int build_itch(void) {
   nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/islands.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall,HEAPF32", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "--shell-file", "itch_shell.html", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=1", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-sASYNCIFY", "-o", "./build/itch/index.html", "-pthread", "-sALLOW_MEMORY_GROWTH",scratch_push_str8f("-sSTACK_SIZE=%lu", MB(10)).s);
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  //ASSERT(os_move_file(str8_lit("./build/itch/bullet_hell.html"), str8_lit("./build/itch/index.html")));
+  nob_cmd_append(&cmd, "sh", "-c", "zip ./build/itch/flight_22.zip ./build/itch/*");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
 }

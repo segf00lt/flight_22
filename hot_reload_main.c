@@ -19,7 +19,7 @@ int main(void) {
   InitWindow(1000, 800, "Flight 22");
   InitAudioDevice();
 
-  SetMasterVolume(GetMasterVolume() * 0.5);
+  //SetMasterVolume(GetMasterVolume() * 0.5);
 
   SetTargetFPS(TARGET_FPS);
   SetTextLineSpacing(10);
@@ -49,6 +49,9 @@ int main(void) {
         game_module_modtime = modtime;
         TraceLog(LOG_DEBUG, "reloading game code");
 
+        float t = GetMusicTimePlayed(gp->music);
+        StopMusicStream(gp->music);
+
         WaitTime(0.17f);
         ASSERT(!dlclose(game_module));
 
@@ -59,6 +62,9 @@ int main(void) {
 
         game_unload_assets_proc(gp);
         game_load_assets_proc(gp);
+
+        PlayMusicStream(gp->music);
+        SeekMusicStream(gp->music, t);
 
       }
     }

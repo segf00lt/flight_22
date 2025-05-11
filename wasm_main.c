@@ -15,7 +15,7 @@ int main(void) {
   InitWindow(WINDOW_WIDTH, WINDOW_HEIGHT, "Flight 22");
   InitAudioDevice();
 
-  SetMasterVolume(GetMasterVolume() * 0.5);
+  //SetMasterVolume(GetMasterVolume() * 0.5);
 
   SetTargetFPS(TARGET_FPS);
   SetTextLineSpacing(10);

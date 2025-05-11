@@ -221,6 +221,7 @@
 #endif
 #define UNREACHABLE   ASSERT_MESSAGE(0, "UNREACHABLE LINE %i FILE %s\n", __LINE__, __FILE__)
 #define UNIMPLEMENTED   ASSERT_MESSAGE(0, "UNIMPLEMENTED LINE %i FILE %s\n", __LINE__, __FILE__)
+#define TODO(msg)   ASSERT_MESSAGE(0, "TODO '%s' LINE %i FILE %s\n", msg, __LINE__, __FILE__)
 // TODO these messages assume a string literal, eventually we should have alternatives for runtime strings
 #define PANICF(msg, ...)    ASSERT_MESSAGE(0, "PANIC ON LINE %i OF FILE %s: "msg"\n", __LINE__, __FILE__, __VA_ARGS__)
 #define PANIC(msg)    PANICF(msg"%s", "")

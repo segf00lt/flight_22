@@ -12,6 +12,8 @@
 #define ATLAS_IMAGE_PATH "./aseprite/atlas.png"
 #define ATLAS_METADATA_PATH "./aseprite/atlas.json"
 
+#define SOUND_DATA_PATH "./sounds/"
+
 
 typedef struct File_frame_range {
   Str8 file_title;
@@ -733,6 +735,31 @@ int main(void) {
   scratch_clear();
 
 #if 0
+  { /* convert .mp3 to C source */
+
+    TraceLog(LOG_INFO, "packaging sounds");
+
+    Str8 code = scratch_push_str8f(
+        "/////////////////////////////\n"
+        "/// BEGIN GENERATED\n\n"
+        );
+
+    FilePathList files = LoadDirectoryFiles(SOUND_DATA_PATH);
+
+    for(int i = 0; i < files.count; i++) {
+
+      Wave wave LoadWave(files.paths[i]);
+
+      if(IsWaveValid(wave)) {
+        ExportWaveAsCode
+      } else {
+        TraceLog(LOG_DEBUG, "skipping %s" file.s);
+      }
+
+    }
+
+  } /* convert .mp3 to C source */
+
   { /* generate random particle textures */
 
     TraceLog(LOG_INFO, "generating particle textures");
