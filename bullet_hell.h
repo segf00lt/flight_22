@@ -142,7 +142,9 @@
   X(BLOOD_PUFF)                  \
   X(PINK_PUFF)                   \
   X(GREEN_PUFF)                  \
+  X(BROWN_PUFF)                  \
   X(WHITE_PUFF)                  \
+  X(BIG_PLANE_EXPLOSION)         \
 
 #define PARTICLE_FLAGS            \
 
@@ -665,6 +667,7 @@ struct Game {
   Sound health_pickup_sound;
   Sound avenger_hurt_sound;
   Sound bomb_sound;
+  Sound powerup_sound;
 
   Music music;
 
@@ -715,6 +718,7 @@ void collide_with_health_pack(Game *gp, Entity *a, Entity *b);
 void collide_with_bomb_pack(Game *gp, Entity *a, Entity *b);
 void collide_with_double_bullets_pack(Game *gp, Entity *a, Entity *b);
 void collide_with_triple_bullets_pack(Game *gp, Entity *a, Entity *b);
+void collide_with_quinta_bullets_pack(Game *gp, Entity *a, Entity *b);
 
 void entity_emit_particles(Game *gp, Entity *ep);
 
@@ -739,7 +743,8 @@ const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT *
 const float PLAYER_FRICTION = 40.0f;
 const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
 const s32 PLAYER_HEALTH = 10;
-const float PLAYER_BOUNDS_RADIUS = 20;
+const float PLAYER_BOUNDS_RADIUS = 25;
+const float PLAYER_SPRITE_Y_OFFSET = 14;
 const float PLAYER_SPRITE_SCALE = 2.0f;
 const float PLAYER_ACCEL = 1.6e4;
 const float PLAYER_SLOW_FACTOR = 0.5f;
@@ -748,6 +753,8 @@ const Entity_kind_mask AVENGER_BULLET_APPLY_COLLISION_MASK =
 ENTITY_KIND_MASK_CRAB     |
 ENTITY_KIND_MASK_BOSS |
 0;
+
+const float PICKUP_BOUNDS_RADIUS = 50.0f;
 
 const Entity_flags DEFAULT_BULLET_FLAGS =
 ENTITY_FLAG_APPLY_COLLISION |
