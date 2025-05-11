@@ -16,6 +16,39 @@
  */
 
 
+bool  title_screen_key_pressed = false;
+int   title_screen_chars_deleted = 0;
+float title_screen_type_char_timer = 0;
+
+const float INTRO_SCREEN_FADE_TIME = 1.0f;
+float intro_screen_fade_timer = 0.0f;
+float intro_screen_colonel_delay = 1.0f;
+Sprite colonel_fu = SPRITE_CORONEL_FU;
+int intro_screen_cur_message = 0;
+int intro_screen_chars_typed = 0;
+float intro_screen_type_char_timer = 0;
+bool  intro_screen_cursor_on = false;
+float intro_screen_cursor_blink_timer = 0;
+float intro_screen_pre_message_delay = 0.8f;
+
+#define INTRO_SCREEN_MESSAGES               \
+  X("SOLDIER, WE'RE ABOUT TO LOSE CONTACT!") \
+  X("REMEMBER THE DRILL:\n\n'W A S D' to move\n'J' to shoot\n'B' to drop bombs") \
+  X("YOU'RE RIGHT OVER THE BERMUDA TRIANGLE, SON.     \nTRY YOUR BEST TO SURVI..ab%K8^as&kuBZzzzzz#*z\n\n==== TRANSMISSION TERMINATED ====") \
+
+
+char *intro_screen_messages[] = {
+#define X(x) x,
+  INTRO_SCREEN_MESSAGES
+#undef X
+};
+
+int intro_screen_message_lengths[] = {
+#define X(x) (int)STRLEN(x),
+  INTRO_SCREEN_MESSAGES
+#undef X
+};
+
 
 /* 
  * function bodies
@@ -41,7 +74,7 @@
 
 #define entity_is_part_of_list(ep) (ep->list_node && ep->list_node->ep == ep)
 
-Entity* entity_spawn(Game *gp) {
+Entity *entity_spawn(Game *gp) {
   Entity *ep = 0;
 
   if(gp->entity_free_list) {
@@ -198,6 +231,7 @@ Entity* spawn_player(Game *gp) {
     ENTITY_FLAG_HAS_BULLET_EMITTER |
     ENTITY_FLAG_RECEIVE_COLLISION |
     ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE |
+    ENTITY_FLAG_NOT_ON_SCREEN |
     //ENTITY_FLAG_EMIT_DEATH_PARTICLES |
     0;
 
@@ -225,7 +259,7 @@ Entity* spawn_player(Game *gp) {
   ep->bounds_color = PLAYER_BOUNDS_COLOR;
 
   ep->radius = PLAYER_BOUNDS_RADIUS;
-  ep->friction = 40.0f;
+  ep->friction = PLAYER_FRICTION;
 
   return ep;
 }
@@ -523,7 +557,7 @@ void entity_emit_particles(Game *gp, Entity *ep) {
 
           p->pos = ep->pos;
           p->vel =
-            Vector2Rotate(Vector2Normalize(Vector2Negate(ep->vel)),
+            Vector2Rotate((Vector2){ 0, -1 },
                 get_random_float(0, 2*PI, 150));
 
           p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1600));
@@ -552,7 +586,7 @@ void entity_emit_particles(Game *gp, Entity *ep) {
 
           p->pos = ep->pos;
           p->vel =
-            Vector2Rotate(Vector2Normalize(Vector2Negate(ep->vel)),
+            Vector2Rotate((Vector2){ 0, -1 },
                 get_random_float(0, 2*PI, 150));
 
           p->vel = Vector2Scale(p->vel, (float)GetRandomValue(80, 90));
@@ -610,7 +644,7 @@ void entity_emit_particles(Game *gp, Entity *ep) {
 
           p->pos = ep->pos;
           p->vel =
-            Vector2Rotate(Vector2Normalize(Vector2Negate(ep->vel)),
+            Vector2Rotate((Vector2){ 0, -1 },
                 get_random_float(0, 2*PI, 150));
 
           p->vel = Vector2Scale(p->vel, (float)GetRandomValue(500, 600));
@@ -639,7 +673,7 @@ void entity_emit_particles(Game *gp, Entity *ep) {
 
           p->pos = ep->pos;
           p->vel =
-            Vector2Rotate(Vector2Normalize(Vector2Negate(ep->vel)),
+            Vector2Rotate((Vector2){ 0, -1 },
                 get_random_float(0.0f, 2*PI, 200));
 
           p->vel = Vector2Scale(p->vel, (float)GetRandomValue(1500, 1800));
@@ -733,8 +767,143 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
     switch(emitter->kind) {
       default:
         UNREACHABLE;
+      case BULLET_EMITTER_KIND_AVENGER_QUINTUS:
+        {
+
+          emitter->bullet_kind = ENTITY_KIND_PLAYER_BULLET;
+
+          emitter->bullet_collision_mask = AVENGER_BULLET_APPLY_COLLISION_MASK;
+          emitter->cooldown_period[0] = 0.12f;
+          emitter->active_rings_mask = 0x1;
+
+          emitter->shots[0] = 1;
+
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[0];
+
+            ring->flags |=
+              BULLET_EMITTER_RING_FLAG_USE_POINT_BAG |
+              0;
+
+            float radius = 15;
+
+            Vector2 point_bag[] = {
+              { 0, -2*radius },
+              { -1.2*radius, -4.2*radius },
+              {           0, -4.2*radius },
+              {  1.2*radius, -4.2*radius },
+              { 0, -6.2*radius },
+            };
+
+            ring->n_bullets = ARRLEN(point_bag);
+            memory_copy_array(ring->bullet_point_bag, point_bag);
+
+            ring->sound = gp->avenger_bullet_sound;
+            ring->spin_vel = 0.0f;
+            ring->radius = 160.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 0;
+            ring->bullet_arm_width = 0.0f;
+            ring->bullet_radius = radius;
+            ring->bullet_vel = 1900;
+            ring->bullet_friction = 0.1f;
+            ring->bullet_damage = 10;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_sprite = SPRITE_AVENGER_BULLET;
+            ring->bullet_sprite_scale = 3.0f;
+            ring->bullet_sprite_tint = WHITE;
+            ring->bullet_flags =
+              ENTITY_FLAG_HAS_SPRITE |
+              ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+              ENTITY_FLAG_APPLY_FRICTION |
+              0;
+
+            ring->bullet_death_particle_emitter = PARTICLE_EMITTER_SPARKS;
+          }
+
+        } break;
+      case BULLET_EMITTER_KIND_AVENGER_TRIPLE_THREAT:
+        {
+
+          emitter->bullet_kind = ENTITY_KIND_PLAYER_BULLET;
+
+          emitter->bullet_collision_mask = AVENGER_BULLET_APPLY_COLLISION_MASK;
+          emitter->cooldown_period[0] = 0.12f;
+          emitter->active_rings_mask = 0x1;
+
+          emitter->shots[0] = 1;
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[0];
+
+            ring->sound = gp->avenger_bullet_sound;
+            ring->spin_vel = 0.0f;
+            ring->radius = 60.0f;
+            ring->n_arms = 3;
+            ring->arms_occupy_circle_sector_percent = 0.06f;
+            ring->n_bullets = 1;
+            ring->bullet_arm_width = 0.0f;
+            ring->bullet_radius = 15;
+            ring->bullet_vel = 1900;
+            ring->bullet_friction = 0.1f;
+            ring->bullet_damage = 10;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_sprite = SPRITE_AVENGER_BULLET;
+            ring->bullet_sprite_tint = WHITE;
+            ring->bullet_sprite_scale = 3.0f;
+            ring->bullet_flags =
+              ENTITY_FLAG_HAS_SPRITE |
+              ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+              ENTITY_FLAG_APPLY_FRICTION |
+              0;
+
+            ring->bullet_death_particle_emitter = PARTICLE_EMITTER_SPARKS;
+
+          }
+
+        } break;
+      case BULLET_EMITTER_KIND_AVENGER_DOUBLE_TROUBLE:
+        {
+
+          emitter->bullet_kind = ENTITY_KIND_PLAYER_BULLET;
+
+          emitter->bullet_collision_mask = AVENGER_BULLET_APPLY_COLLISION_MASK;
+          emitter->cooldown_period[0] = 0.05f;
+          emitter->active_rings_mask = 0x1;
+
+          emitter->shots[0] = 1;
+          {
+            Bullet_emitter_ring *ring = &emitter->rings[0];
+
+            ring->sound = gp->avenger_bullet_sound;
+            ring->spin_vel = 0.0f;
+            ring->radius = 60.0f;
+            ring->n_arms = 1;
+            ring->arms_occupy_circle_sector_percent = 0;
+            ring->n_bullets = 2;
+            ring->bullet_arm_width = 30.0f;
+            ring->bullet_radius = 15;
+            ring->bullet_vel = 1900;
+            ring->bullet_friction = 0.1f;
+            ring->bullet_damage = 3;
+            ring->bullet_bounds_color = GREEN;
+            ring->bullet_sprite = SPRITE_AVENGER_BULLET;
+            ring->bullet_sprite_tint = WHITE;
+            ring->bullet_sprite_scale = 3.0f;
+            ring->bullet_flags =
+              ENTITY_FLAG_HAS_SPRITE |
+              ENTITY_FLAG_EMIT_DEATH_PARTICLES |
+              ENTITY_FLAG_APPLY_FRICTION |
+              0;
+
+            ring->bullet_death_particle_emitter = PARTICLE_EMITTER_SPARKS;
+
+          }
+
+        } break;
       case BULLET_EMITTER_KIND_AVENGER:
         {
+
+          emitter->bullet_kind = ENTITY_KIND_PLAYER_BULLET;
 
           emitter->bullet_collision_mask = AVENGER_BULLET_APPLY_COLLISION_MASK;
           emitter->cooldown_period[0] = 0.04f;
@@ -837,6 +1006,8 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
       case BULLET_EMITTER_KIND_CRAB_RADIAL_BOOM:
         {
 
+          emitter->bullet_kind = ENTITY_KIND_ENEMY_BULLET;
+
           emitter->rings[0].flags |=
             0;
 
@@ -877,6 +1048,8 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
       case BULLET_EMITTER_KIND_CRAB_BASIC:
         {
 
+          emitter->bullet_kind = ENTITY_KIND_ENEMY_BULLET;
+
           emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
           emitter->active_rings_mask = 0x1;
 
@@ -915,6 +1088,8 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
         } break;
       case BULLET_EMITTER_KIND_CRAB_BATTLE_RIFLE:
         {
+
+          emitter->bullet_kind = ENTITY_KIND_ENEMY_BULLET;
 
           emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
           emitter->active_rings_mask = 0x1;
@@ -960,6 +1135,8 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
         } break;
       case BULLET_EMITTER_KIND_CRAB_V_SHOT:
         {
+
+          emitter->bullet_kind = ENTITY_KIND_ENEMY_BULLET;
 
           emitter->bullet_collision_mask = ENTITY_KIND_MASK_PLAYER;
           emitter->active_rings_mask = 0x1;
@@ -1018,6 +1195,8 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
     emitter->cocked = 1;
 
   }
+
+  ASSERT(emitter->bullet_kind != ENTITY_KIND_INVALID);
 
   { /* flags checks */
   } /* flags checks */
@@ -1145,20 +1324,19 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
 
         if(ring->flags & BULLET_EMITTER_RING_FLAG_USE_POINT_BAG) {
 
-          if(ring->flags & BULLET_EMITTER_RING_FLAG_LOOK_AT_PLAYER) {
-            Vector2 look_at_player_dir_perp =
-            {
-              .x = look_at_player_dir.y, .y = -look_at_player_dir.x,
-            };
+          Vector2 dir = ring->dir;
+          Vector2 dir_perp =
+          {
+            .x = dir.y, .y = -dir.x,
+          };
 
-            Matrix look_transform =
-            {
-              .m0 = look_at_player_dir_perp.x, .m4 = look_at_player_dir.x,
-              .m1 = look_at_player_dir_perp.y, .m5 = look_at_player_dir.y,
-            };
+          Matrix dir_transform =
+          {
+            .m0 = dir_perp.x, .m4 = dir.x,
+            .m1 = dir_perp.y, .m5 = dir.y,
+          };
 
-            arm_transform = MatrixMultiply(arm_transform, look_transform);
-          }
+          arm_transform = MatrixMultiply(arm_transform, dir_transform);
 
           ASSERT(ring->n_bullets < MAX_BULLETS_IN_BAG);
 
@@ -1183,7 +1361,7 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
         for(int bullet_i = 0; bullet_i < ring->n_bullets; bullet_i++) {
           Entity *bullet = entity_spawn(gp);
 
-          bullet->kind = ENTITY_KIND_BULLET;
+          bullet->kind = emitter->bullet_kind;
           bullet->update_order = ENTITY_ORDER_FIRST;
           bullet->draw_order = ENTITY_ORDER_LAST;
 
@@ -1389,7 +1567,7 @@ void game_load_assets(Game *gp) {
   gp->font = GetFontDefault();
 
   gp->render_texture = LoadRenderTexture(WINDOW_WIDTH, WINDOW_HEIGHT);
-  gp->background_texture = LoadTexture("./sprites/islands.png");
+  gp->background_texture = LoadTexture("./sprites/the_sea.png");
   gp->sprite_atlas = LoadTexture("./aseprite/atlas.png");
   SetTextureFilter(gp->sprite_atlas, TEXTURE_FILTER_POINT);
 
@@ -1397,17 +1575,33 @@ void game_load_assets(Game *gp) {
   gp->crab_hurt_sound      = LoadSound("./sounds/crab_hurt_sound.wav");
   gp->health_pickup_sound  = LoadSound("./sounds/health_pickup.wav");
   gp->avenger_hurt_sound   = LoadSound("./sounds/player_damage.wav");
+  gp->bomb_sound           = LoadSound("./sounds/bomb_sound.wav");
 
   gp->music = LoadMusicStream("./sounds/synthwave.wav");
 
 }
 
 void game_unload_assets(Game *gp) {
-  UnloadSound(gp->avenger_bullet_sound);
 
   UnloadRenderTexture(gp->render_texture);
   UnloadTexture(gp->sprite_atlas);
   UnloadTexture(gp->background_texture);
+
+  StopMusicStream(gp->music);
+  UnloadMusicStream(gp->music);
+
+  StopSound(gp->avenger_bullet_sound);
+  StopSound(gp->crab_hurt_sound);
+  StopSound(gp->health_pickup_sound);
+  StopSound(gp->avenger_hurt_sound);
+  StopSound(gp->bomb_sound);
+
+  UnloadSound(gp->avenger_bullet_sound);
+  UnloadSound(gp->crab_hurt_sound);
+  UnloadSound(gp->health_pickup_sound);
+  UnloadSound(gp->avenger_hurt_sound);
+  UnloadSound(gp->bomb_sound);
+
 }
 
 void game_reset(Game *gp) {
@@ -1421,6 +1615,8 @@ void game_reset(Game *gp) {
   gp->debug_flags = GAME_DEBUG_FLAG_HOT_RELOAD;
 #endif
 
+  gp->player = 0;
+  gp->player_handle = (Entity_handle){0};
   gp->entity_free_list = 0;
   gp->entities_allocated = 0;
   gp->live_entities = 0;
@@ -1447,6 +1643,10 @@ void game_reset(Game *gp) {
 
   SeekMusicStream(gp->music, 0);
 
+  gp->gameover_pre_delay = 0;
+  gp->gameover_type_char_timer = 0;
+  gp->gameover_chars_typed = 0;
+
 }
 
 void game_wave_end(Game *gp) {
@@ -1456,7 +1656,7 @@ void game_wave_end(Game *gp) {
   gp->next_state = GAME_STATE_WAVE_TRANSITION;
   gp->flags |= GAME_FLAG_PLAYER_CANNOT_SHOOT;
   gp->wave_timer = WAVE_DELAY_TIME;
-  gp->wave_type_char_timer = WAVE_BANNER_TYPE_SPEED;
+  gp->wave_type_char_timer = TYPING_SPEED;
   gp->wave_chars_typed = 0;
   gp->wave_banner_msg = push_str8f(gp->wave_scratch, "WAVE %i", gp->wave+1);
   gp->wave_banner_type_dir = 1;
@@ -2145,6 +2345,10 @@ end:
 void game_update_and_draw(Game *gp) {
 
   if(IsMusicStreamPlaying(gp->music)) {
+    if(GetMusicTimePlayed(gp->music) >= 180.0f) {
+      SeekMusicStream(gp->music, 60.0f);
+    }
+
     SetMusicVolume(gp->music, 0.10f);
     UpdateMusicStream(gp->music);
   }
@@ -2180,12 +2384,18 @@ void game_update_and_draw(Game *gp) {
       gp->input_flags |= INPUT_FLAG_SHOOT;
     }
 
+    if(IsKeyPressed(KEY_B)) {
+      gp->input_flags |= INPUT_FLAG_BOMB;
+    }
+
     if(IsKeyDown(KEY_LEFT_SHIFT)) {
       gp->input_flags |= INPUT_FLAG_SLOW_MOVE;
     }
 
     if(IsKeyPressed(KEY_ESCAPE)) {
-      gp->input_flags |= INPUT_FLAG_PAUSE;
+      if(gp->state > GAME_STATE_INTRO_SCREEN) {
+        gp->input_flags |= INPUT_FLAG_PAUSE;
+      }
     }
 
 #ifdef DEBUG
@@ -2247,6 +2457,10 @@ void game_update_and_draw(Game *gp) {
       gp->background_y_offset += gp->timestep * 100;
     }
 
+    if(gp->bomb_cooldown > 0.0f) {
+      gp->bomb_cooldown -= gp->timestep;
+    }
+
     switch(gp->state) {
       default:
         UNREACHABLE;
@@ -2257,33 +2471,49 @@ void game_update_and_draw(Game *gp) {
           //SeekMusicStream(gp->music, 300);
           SetMusicVolume(gp->music, 1.0);
 
-          gp->player = spawn_player(gp);
-          gp->player_handle = handle_from_entity(gp->player);
-
           {
 #ifdef DEBUG
 
             gp->wave = 0;
-            gp->phase_index = 4;
+            gp->phase_index = 0;
 
             gp->debug_flags |=
-              GAME_DEBUG_FLAG_DEBUG_UI |
+              //GAME_DEBUG_FLAG_DEBUG_UI |
               //GAME_DEBUG_FLAG_PLAYER_INVINCIBLE |
-              GAME_DEBUG_FLAG_SKIP_TRANSITIONS |
+              //GAME_DEBUG_FLAG_SKIP_TRANSITIONS |
               0;
+
+            //gp->next_state = GAME_STATE_WAVE_TRANSITION;
+            gp->next_state = GAME_STATE_SPAWN_PLAYER;
+            gp->bomb_count = 1;
 #else
 
             gp->wave = 0;
             gp->phase_index = 0;
 
+            gp->next_state = GAME_STATE_TITLE_SCREEN;
 #endif
-            gp->next_state = GAME_STATE_WAVE_TRANSITION;
+
+            { /* init globals */
+
+              title_screen_key_pressed = false;
+              title_screen_chars_deleted = 0;
+              title_screen_type_char_timer = 0;
+
+              intro_screen_fade_timer = 0;
+              intro_screen_colonel_delay = 1.0f;
+              intro_screen_cur_message = 0;
+              intro_screen_chars_typed = 0;
+              intro_screen_type_char_timer = 0;
+              intro_screen_pre_message_delay = 0.8f;
+
+            } /* init globals */
 
             memory_set(&gp->phase, 0, sizeof(gp->phase));
 
             gp->flags |= GAME_FLAG_PLAYER_CANNOT_SHOOT;
             gp->wave_timer = WAVE_DELAY_TIME;
-            gp->wave_type_char_timer = WAVE_BANNER_TYPE_SPEED;
+            gp->wave_type_char_timer = TYPING_SPEED;
             gp->wave_chars_typed = 0;
             gp->wave_banner_msg = push_str8f(gp->wave_scratch, "WAVE %i", gp->wave+1);
             gp->wave_banner_type_dir = 1;
@@ -2295,9 +2525,48 @@ void game_update_and_draw(Game *gp) {
         } break;
       case GAME_STATE_TITLE_SCREEN:
         {
+
+          if(title_screen_key_pressed) {
+            if(title_screen_chars_deleted >= STRLEN("FLIGHT 22")) {
+              gp->next_state = GAME_STATE_INTRO_SCREEN;
+              gp->intro_scope = scope_begin(gp->scratch);
+            } else {
+
+              if(title_screen_type_char_timer >= TYPING_SPEED) {
+                title_screen_type_char_timer = 0;
+                title_screen_chars_deleted += 1;
+              } else {
+                title_screen_type_char_timer += gp->timestep;
+              }
+
+            }
+          }
+
+          if(gp->input_flags & INPUT_FLAG_ANY) {
+            title_screen_key_pressed = true;
+          }
+
+        } break;
+      case GAME_STATE_INTRO_SCREEN:
+        {
+
         } break;
       case GAME_STATE_SPAWN_PLAYER:
         {
+
+          if(!gp->player) {
+            gp->player = spawn_player(gp);
+            gp->player->friction = 3.0f;
+            gp->player->vel.y = -6e2;
+            gp->player_handle = handle_from_entity(gp->player);
+          } else {
+            if(gp->player->pos.y < WINDOW_HEIGHT*0.8f) {
+              gp->next_state = GAME_STATE_WAVE_TRANSITION;
+              gp->player->friction = PLAYER_FRICTION;
+              gp->player->vel.y = 0;
+            }
+          }
+
         } break;
       case GAME_STATE_WAVE_TRANSITION:
         {
@@ -2330,7 +2599,7 @@ void game_update_and_draw(Game *gp) {
             } else {
 
               if(gp->wave_type_char_timer < 0) {
-                gp->wave_type_char_timer = WAVE_BANNER_TYPE_SPEED;
+                gp->wave_type_char_timer = TYPING_SPEED;
                 gp->wave_chars_typed += gp->wave_banner_type_dir;
               } else {
                 gp->wave_type_char_timer -= gp->timestep;
@@ -2348,9 +2617,34 @@ void game_update_and_draw(Game *gp) {
         break;
       case GAME_STATE_VICTORY:
         {
+
+
         } break;
       case GAME_STATE_GAME_OVER:
         {
+
+          if(gp->gameover_pre_delay >= 0.6) {
+            if(gp->gameover_chars_typed >= STRLEN("GAME OVER")) {
+
+              if(gp->input_flags & INPUT_FLAG_ANY) {
+                game_reset(gp);
+                goto update_end;
+              }
+
+            } else {
+
+              if(gp->gameover_type_char_timer < 0) {
+                gp->gameover_type_char_timer = TYPING_SPEED;
+                gp->gameover_chars_typed += 1;
+              } else {
+                gp->gameover_type_char_timer -= gp->timestep;
+              }
+
+            }
+          } else {
+            gp->gameover_pre_delay += gp->timestep;
+          }
+
         } break;
 #ifdef DEBUG
       case GAME_STATE_DEBUG_SANDBOX:
@@ -2387,7 +2681,7 @@ void game_update_and_draw(Game *gp) {
             case ENTITY_MOVE_CONTROL_NONE:
               break;
             case ENTITY_MOVE_CONTROL_PLAYER:
-              {
+              if(gp->state > GAME_STATE_SPAWN_PLAYER) {
 
                 b8 was_moving_left = 0;
                 b8 was_moving_right = 0;
@@ -2458,7 +2752,7 @@ void game_update_and_draw(Game *gp) {
                   if(ep->invulnerability_timer > 0) {
                     ep->received_damage = 0;
                   } else {
-                    ep->invulnerability_timer = 1.6f;
+                    ep->invulnerability_timer = 1.2f;
                   }
 
                 }
@@ -2491,6 +2785,34 @@ void game_update_and_draw(Game *gp) {
                   if(!(gp->flags & GAME_FLAG_PLAYER_CANNOT_SHOOT)) {
                     ep->bullet_emitter.shoot = 1;
                   }
+                }
+
+                if(gp->input_flags & INPUT_FLAG_BOMB) {
+
+                  if(gp->bomb_count > 0) {
+                    if(gp->bomb_cooldown <= 0) {
+
+                      SetSoundVolume(gp->bomb_sound, 0.2f);
+                      PlaySound(gp->bomb_sound);
+
+                      gp->bomb_cooldown = BOMB_COOLDOWN_TIME;
+                      gp->bomb_count--;
+
+                      for(int i = 0; i < gp->entities_allocated; i++) {
+                        Entity *check = &gp->entities[i];
+
+                        if(check->live) {
+                          if(CheckCollisionCircleRec(check->pos, check->radius, WINDOW_RECT)) {
+                            if(entity_kind_in_mask(check->kind, ENTITY_KIND_MASK_CRAB | ENTITY_KIND_MASK_ENEMY_BULLET)) {
+                              check->flags |= ENTITY_FLAG_DIE_NOW;
+                            }
+                          }
+                        }
+                      }
+
+                    }
+                  }
+
                 }
 
                 if(gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) {
@@ -2750,7 +3072,9 @@ void game_update_and_draw(Game *gp) {
           }
 
           if(ep->flags & ENTITY_FLAG_HAS_BULLET_EMITTER) {
-            entity_emit_bullets(gp, ep);
+            if(gp->state != GAME_STATE_GAME_OVER) {
+              entity_emit_bullets(gp, ep);
+            }
           }
 
           if(ep->flags & ENTITY_FLAG_APPLY_COLLISION) {
@@ -2812,23 +3136,25 @@ void game_update_and_draw(Game *gp) {
 
                 if(ep->flags & ENTITY_FLAG_RECEIVE_COLLISION_DAMAGE) {
 
+                  if(ep->received_damage > 0) {
+                    if(IsSoundValid(ep->hurt_sound)) {
+                      SetSoundPan(ep->hurt_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
+                      if(ep->kind == ENTITY_KIND_PLAYER) {
+                        SetSoundVolume(ep->hurt_sound, 0.17f);
+                      } else {
+                        SetSoundVolume(ep->hurt_sound, 0.5f);
+                      }
+                      PlaySound(ep->hurt_sound);
+                    }
+                  }
+
                   ep->health -= ep->received_damage;
 
                   if(ep->flags & ENTITY_FLAG_DAMAGE_INCREMENTS_SCORE) {
-                    gp->score += 10;
+                    gp->score += 10 * ep->received_damage;
                   }
 
                   ep->received_damage = 0;
-
-                  if(IsSoundValid(ep->hurt_sound)) {
-                    SetSoundPan(ep->hurt_sound, Normalize(ep->pos.x, WINDOW_WIDTH, 0));
-                    if(ep->kind == ENTITY_KIND_PLAYER) {
-                      SetSoundVolume(ep->hurt_sound, 0.17f);
-                    } else {
-                      SetSoundVolume(ep->hurt_sound, 0.5f);
-                    }
-                    PlaySound(ep->hurt_sound);
-                  }
 
                   if(ep->kind != ENTITY_KIND_PLAYER) {
                     ep->flags |= ENTITY_FLAG_APPLY_EFFECT_TINT;
@@ -2873,8 +3199,10 @@ void game_update_and_draw(Game *gp) {
 
           if(ep->flags & ENTITY_FLAG_DIE_IF_OFFSCREEN) {
             if(!is_on_screen) {
-              entity_die(gp, ep);
-              goto entity_update_end;
+              if(!(ep->flags & ENTITY_FLAG_NOT_ON_SCREEN)) {
+                entity_die(gp, ep);
+                goto entity_update_end;
+              }
             }
           }
 
@@ -2914,6 +3242,15 @@ entity_update_end:;
         } /* entity_update */
 
       } /* update_entities */
+
+      if(gp->state > GAME_STATE_SPAWN_PLAYER) {
+        Entity *player = entity_from_handle(gp->player_handle);
+
+        if(!player) {
+          gp->next_state = GAME_STATE_GAME_OVER;
+        }
+      }
+
     }
 
     gp->live_particles = 0;
@@ -2958,10 +3295,15 @@ update_end:;
   { /* draw */
     ClearBackground(BLACK);
 
-    {
+    { /* draw_background */
+
+      float height = 3*0.25*gp->background_texture.width;
+
+      // TODO better background
+
       Rectangle source =
       {
-        0, 0, gp->background_texture.width, gp->background_texture.height,
+        0, 0, gp->background_texture.width, height,
       };
 
       Rectangle dest1 =
@@ -2978,7 +3320,8 @@ update_end:;
 
       DrawTexturePro(gp->background_texture, source, dest1, VEC2_ZERO, 0, WHITE);
       DrawTexturePro(gp->background_texture, source, dest2, VEC2_ZERO, 0, WHITE);
-    }
+
+    } /* draw_background */
 
     for(Entity_order order = ENTITY_ORDER_FIRST; order < ENTITY_ORDER_MAX; order++) {
       for(int i = 0; i < gp->entities_allocated; i++)
@@ -3025,7 +3368,7 @@ update_end:;
 
     }
 
-    { /* HUD */
+    if(gp->state > GAME_STATE_INTRO_SCREEN) { /* HUD */
 
       Entity *player = entity_from_handle(gp->player_handle);
 
@@ -3063,7 +3406,7 @@ update_end:;
           (Vector2){ 10, 10 },
           20,
           2,
-          GOLD);
+          BLACK);
 
     } /* HUD */
 
@@ -3088,19 +3431,269 @@ update_end:;
           WAVE_BANNER_FONT_SPACING,
           WAVE_BANNER_FONT_COLOR);
 
-      wave_scope_end(scope);
+      scope_end(scope);
+    } else if(gp->state == GAME_STATE_GAME_OVER) {
+
+      Arena_scope scope = frame_scope_begin();
+
+      char msg[] = "GAME OVER";
+      msg[gp->gameover_chars_typed] = 0;
+
+      const float width = WINDOW_WIDTH;
+      const float height = WINDOW_HEIGHT;
+
+      Vector2 pos = { width * 0.5, height * 0.4f };
+      Vector2 size = MeasureTextEx(gp->font, msg, GAME_OVER_FONT_SIZE, 10);
+      DrawTextEx(
+          gp->font,
+          msg,
+          Vector2Subtract(pos, Vector2Scale(size, 0.5)),
+          GAME_OVER_FONT_SIZE,
+          GAME_OVER_FONT_SPACING,
+          GAME_OVER_FONT_COLOR);
+
+      scope_end(scope);
+
+    } else if(gp->state == GAME_STATE_TITLE_SCREEN) {
+
+      char title[] = "FLIGHT 22";
+      char *hint = "press any key to start";
+      int title_font_size = 100;
+      int hint_font_size = 20;
+
+      Color title_color = ColorBrightness(MUSTARD, 0.3);
+      Color hint_color = ColorBrightness(BLACK, 0.3);
+
+      static bool hint_on = true;
+      static float hint_blink_time = 0.0f;
+
+      Vector2 title_pos = { WINDOW_WIDTH * 0.5, WINDOW_HEIGHT * 0.4f };
+      Vector2 title_size = MeasureTextEx(gp->font, title, title_font_size, title_font_size/10);
+
+      Vector2 hint_pos = { WINDOW_WIDTH * 0.5, WINDOW_HEIGHT * 0.5f };
+      Vector2 hint_size = MeasureTextEx(gp->font, hint, hint_font_size, hint_font_size/10);
+
+      if(title_screen_key_pressed) {
+        title[STRLEN(title)-title_screen_chars_deleted] = 0;
+
+        DrawTextEx(
+            gp->font,
+            title,
+            Vector2Subtract(title_pos, Vector2Scale(title_size, 0.5)),
+            title_font_size,
+            title_font_size/10,
+            title_color);
+
+      } else {
+
+        DrawTextEx(
+            gp->font,
+            title,
+            Vector2Subtract(title_pos, Vector2Scale(title_size, 0.5)),
+            title_font_size,
+            title_font_size/10,
+            title_color);
+
+        if(hint_on) {
+          DrawTextEx(
+              gp->font,
+              hint,
+              Vector2Subtract(hint_pos, Vector2Scale(hint_size, 0.5)),
+              hint_font_size,
+              hint_font_size/10,
+              hint_color);
+        }
+
+        if((hint_on && hint_blink_time >= 0.75f) || (!hint_on && hint_blink_time >= 0.5f)) {
+          hint_on = !hint_on;
+          hint_blink_time = 0;
+        } else {
+          hint_blink_time += gp->timestep;
+        }
+      }
+
+    } else if(gp->state == GAME_STATE_INTRO_SCREEN) {
+
+      DrawRectangleRec(WINDOW_RECT, ColorAlpha(BLACK, Lerp(0.0f, 0.4f, Normalize(intro_screen_fade_timer, 0, INTRO_SCREEN_FADE_TIME))));
+
+      if(intro_screen_fade_timer < INTRO_SCREEN_FADE_TIME) {
+        intro_screen_fade_timer += gp->timestep;
+      } else if(intro_screen_colonel_delay > 0.0f) {
+        intro_screen_colonel_delay -= gp->timestep;
+      } else {
+
+        { /* update colonel fu */
+          Sprite *sp = &colonel_fu;
+          if(!(sp->flags & SPRITE_FLAG_STILL)) {
+
+            ASSERT(sp->fps > 0);
+
+            if(sp->cur_frame < sp->total_frames) {
+              sp->frame_counter++;
+
+              if(sp->frame_counter >= (TARGET_FPS / sp->fps)) {
+                sp->frame_counter = 0;
+                sp->cur_frame++;
+              }
+
+            }
+
+            if(sp->cur_frame >= sp->total_frames) {
+              if(sp->flags & SPRITE_FLAG_INFINITE_REPEAT) {
+                if(sp->flags & SPRITE_FLAG_PINGPONG) {
+                  sp->cur_frame--;
+                  sp->flags ^= SPRITE_FLAG_REVERSE;
+                } else {
+                  sp->cur_frame = 0;
+                }
+              } else {
+                sp->cur_frame--;
+                sp->flags |= SPRITE_FLAG_AT_LAST_FRAME | SPRITE_FLAG_STILL;
+                ASSERT(sp->cur_frame >= 0 && sp->cur_frame < sp->total_frames);
+              }
+            }
+
+          }
+
+        } /* update colonel fu */
+
+        { /* draw colonel fu */
+          Sprite sp = colonel_fu;
+          Vector2 pos = { WINDOW_WIDTH * 0.16, WINDOW_HEIGHT * 0.3 };
+          f32 scale = 8.0f;
+
+          ASSERT(sp.cur_frame >= 0 && sp.cur_frame < sp.total_frames);
+
+          Sprite_frame frame;
+
+          if(sp.flags & SPRITE_FLAG_REVERSE) {
+            frame = __sprite_frames[sp.last_frame - sp.cur_frame];
+          } else {
+            frame = __sprite_frames[sp.first_frame + sp.cur_frame];
+          }
+
+          Rectangle source_rec =
+          {
+            .x = (float)frame.x,
+            .y = (float)frame.y,
+            .width = (float)frame.w,
+            .height = (float)frame.h,
+          };
+
+          Rectangle dest_rec =
+          {
+            .x = (pos.x - scale*0.5f*source_rec.width),
+            .y = (pos.y - scale*0.5f*source_rec.height),
+            .width = scale*source_rec.width,
+            .height = scale*source_rec.height,
+          };
+
+          if(sp.flags & SPRITE_FLAG_DRAW_MIRRORED_X) {
+            source_rec.width *= -1;
+          }
+
+          if(sp.flags & SPRITE_FLAG_DRAW_MIRRORED_Y) {
+            source_rec.height *= -1;
+          }
+
+          DrawTexturePro(gp->sprite_atlas, source_rec, dest_rec, (Vector2){0}, 0, WHITE);
+          DrawRectangleLinesEx(dest_rec, 2.0f, MUSTARD);
+        } /* draw colonel fu */
+
+        if(intro_screen_pre_message_delay > 0) {
+          intro_screen_pre_message_delay -= gp->timestep;
+        } else if(intro_screen_cur_message >= ARRLEN(intro_screen_messages)) {
+          gp->next_state = GAME_STATE_SPAWN_PLAYER;
+        } else {
+
+          if(intro_screen_chars_typed >= intro_screen_message_lengths[intro_screen_cur_message]) {
+            if(gp->input_flags & INPUT_FLAG_ANY) {
+              intro_screen_cur_message += 1;
+              intro_screen_chars_typed = 0;
+            }
+          } else {
+
+            if(intro_screen_type_char_timer >= TYPING_SPEED) {
+              intro_screen_type_char_timer = 0;
+              intro_screen_chars_typed += 1;
+            } else {
+              intro_screen_type_char_timer += gp->timestep;
+            }
+
+          }
+
+          {
+
+            Arena_scope scope = scope_begin(gp->scratch);
+
+            Str8 s =
+            {
+              .s = (u8*)intro_screen_messages[intro_screen_cur_message],
+              .len = intro_screen_chars_typed,
+            };
+
+
+            bool message_complete = false;
+            if(intro_screen_chars_typed < intro_screen_message_lengths[intro_screen_cur_message]) {
+              intro_screen_cursor_on = true;
+            } else {
+              message_complete = true;
+              if(intro_screen_cursor_blink_timer > 0.5f) {
+                intro_screen_cursor_blink_timer = 0;
+                intro_screen_cursor_on = !intro_screen_cursor_on;
+              } else {
+                intro_screen_cursor_blink_timer += gp->timestep;
+              }
+            }
+
+            char *msg;
+
+            if(intro_screen_cursor_on) {
+              msg = (char*)push_str8f(gp->scratch, "%S_", s).s;
+            } else {
+              msg = push_cstr_copy_str8(gp->scratch, s);
+            }
+
+            Vector2 pos = { WINDOW_WIDTH * 0.28, WINDOW_HEIGHT * 0.18f };
+            DrawTextEx(
+                gp->font,
+                msg,
+                pos,
+                30,
+                3,
+                MUSTARD);
+
+            if(message_complete) {
+
+              Vector2 pos = { WINDOW_WIDTH * 0.28, WINDOW_HEIGHT * 0.40f };
+              DrawTextEx(
+                  gp->font,
+                  "press any key to continue",
+                  pos,
+                  20,
+                  2,
+                  ColorAlpha(LIGHTGRAY, 0.7f));
+            }
+
+            scope_end(scope);
+
+          }
+
+        }
+
+      }
+
     }
 
     if(gp->flags & GAME_FLAG_PAUSE) {
-      Color c = { .a = 100 };
-      DrawRectangleRec(WINDOW_RECT, c);
+      DrawRectangleRec(WINDOW_RECT, (Color){ .a = 100 });
 
       char *paused_msg = "PAUSED";
       char *hint_msg = "press any key to resume";
       int pause_font_size = 90;
       int hint_font_size = 20;
 
-      Color pause_color = GOLD;
+      Color pause_color = MUSTARD;
       Color hint_color = LIGHTGRAY;
 
       static b8 hint_on = 1;
@@ -3195,8 +3788,8 @@ update_end:;
           gp->particles_pos,
           GetScreenWidth(),
           GetScreenHeight(),
-          gp->player->pos.x,
-          gp->player->pos.y,
+          gp->player ? gp->player->pos.x : 0,
+          gp->player ? gp->player->pos.y : 0,
           gp->wave+1,
           gp->phase_index+1,
           Game_state_strings[gp->state]);

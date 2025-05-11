@@ -81,6 +81,8 @@ int build_wasm(void);
 int build_itch(void);
 int run_tags(void);
 int build_raylib(void);
+int build_raylib_shared(void);
+int build_raylib_web(void);
 int generate_vim_project_file(void);
 int generate_nob_project_file(void);
 int load_project_file(void);
@@ -122,6 +124,54 @@ int build_raylib(void) {
   os_move_file(str8_lit("./libraylib.so.5.5.0"), str8_lit("./build/libraylib.so.5.5.0"));
   os_move_file(str8_lit("./libraylib.so.550"), str8_lit("./build/libraylib.so.550"));
   os_move_file(str8_lit("./libraylib.so"), str8_lit("./build/libraylib.so"));
+
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  ASSERT(os_set_current_dir(project_root_path));
+
+  return 1;
+}
+
+int build_raylib_shared(void) {
+  nob_log(NOB_INFO, "building raylib shared");
+
+  Nob_Cmd cmd = {0};
+
+  ASSERT(nob_mkdir_if_not_exists("./third_party/raylib/build"));
+
+  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
+
+  // shared
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  os_move_file(str8_lit("./libraylib.so.5.5.0"), str8_lit("./build/libraylib.so.5.5.0"));
+  os_move_file(str8_lit("./libraylib.so.550"), str8_lit("./build/libraylib.so.550"));
+  os_move_file(str8_lit("./libraylib.so"), str8_lit("./build/libraylib.so"));
+
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  ASSERT(os_set_current_dir(project_root_path));
+
+  return 1;
+}
+
+int build_raylib_web(void) {
+  nob_log(NOB_INFO, "building raylib web");
+
+  Nob_Cmd cmd = {0};
+
+  ASSERT(nob_mkdir_if_not_exists("./third_party/raylib/build"));
+
+  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
+
+  // web
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  os_move_file(str8_lit("./libraylib.web.a"), str8_lit("./build/libraylib.web.a"));
 
   nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
@@ -223,7 +273,7 @@ int build_itch(void) {
   ASSERT(nob_mkdir_if_not_exists("./build/itch"));
 
   char *target = "wasm_main.c";
-  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/islands.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall,HEAPF32", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "--shell-file", "itch_shell.html", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=1", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-sASYNCIFY", "-o", "./build/itch/index.html", "-pthread", "-sALLOW_MEMORY_GROWTH",scratch_push_str8f("-sSTACK_SIZE=%lu", MB(10)).s);
+  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/the_sea.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall,HEAPF32", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "--shell-file", "itch_shell.html", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=1", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-sASYNCIFY", "-o", "./build/itch/index.html", "-pthread", "-sALLOW_MEMORY_GROWTH",scratch_push_str8f("-sSTACK_SIZE=%lu", MB(10)).s);
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   nob_cmd_append(&cmd, "sh", "-c", "zip ./build/itch/flight_22.zip ./build/itch/*");
@@ -377,6 +427,8 @@ int main(int argc, char **argv) {
 
   //if(!generate_vim_project_file()) return 1;
   //if(!build_raylib()) return 1;
+  //if(!build_raylib_shared()) return 1;
+  //if(!build_raylib_web()) return 1;
   //if(!build_metaprogram()) return 1;
 
   run_metaprogram();

@@ -25,3 +25,5 @@ bullet_hell.data
 build/
 third_party/raylib/build/
 screenshot*.png
+sounds/*.mp3
+*.webm

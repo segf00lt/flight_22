@@ -45,9 +45,10 @@
 #define GAME_STATES             \
   X(NONE)                       \
   X(TITLE_SCREEN)               \
+  X(INTRO_SCREEN)               \
   X(SPAWN_PLAYER)               \
-  X(MAIN_LOOP)                  \
   X(WAVE_TRANSITION)            \
+  X(MAIN_LOOP)                  \
   X(VICTORY)                    \
   X(GAME_OVER)                  \
   X(DEBUG_SANDBOX)              \
@@ -72,18 +73,21 @@
   X(MOVE_LEFT)              \
   X(MOVE_RIGHT)             \
   X(SHOOT)                  \
+  X(BOMB)                   \
   X(SLOW_MOVE)              \
   X(PAUSE)                  \
 
 #define ENTITY_KINDS           \
   X(PLAYER)                    \
   X(LEADER)                    \
-  X(BULLET)                    \
+  X(PLAYER_BULLET)             \
+  X(ENEMY_BULLET)              \
   X(CRAB)                      \
   X(HEALTH_PACK)               \
   X(BOMB_PACK)                 \
   X(DOUBLE_BULLETS_PACK)       \
   X(TRIPLE_BULLETS_PACK)       \
+  X(QUINTA_BULLETS_PACK)       \
   X(BOSS)                      \
 
 #define ENTITY_ORDERS   \
@@ -143,9 +147,10 @@
 #define PARTICLE_FLAGS            \
 
 #define BULLET_EMITTER_KINDS         \
+  X(AVENGER)                         \
   X(AVENGER_DOUBLE_TROUBLE)          \
   X(AVENGER_TRIPLE_THREAT)           \
-  X(AVENGER)                         \
+  X(AVENGER_QUINTUS)                 \
   X(CRAB_BASIC)                      \
   X(CRAB_BATTLE_RIFLE)               \
   X(CRAB_RADIAL_BOOM)                \
@@ -163,7 +168,7 @@
  * macros
  */
 
-#define entity_kind_in_mask(kind, mask) (!!(mask & (1ull<<kind)))
+#define entity_kind_in_mask(kind, mask) (!!((mask) & (1ull<<(kind))))
 #define frame_arr_init(array) arr_init((array), gp->frame_scratch)
 
 
@@ -445,6 +450,7 @@ struct Bullet_emitter_ring {
 struct Bullet_emitter {
   Bullet_emitter_flags flags;
   Entity_kind_mask bullet_collision_mask;
+  Entity_kind bullet_kind;
   Bullet_emitter_kind  kind;
 
   Bullet_emitter_ring rings[MAX_BULLET_EMITTER_RINGS];
@@ -639,6 +645,7 @@ struct Game {
   s32 score;
   s32 player_health;
   s32 bomb_count;
+  f32 bomb_cooldown;
 
   f32  wave_timer;
   f32  wave_type_char_timer;
@@ -647,10 +654,17 @@ struct Game {
   s32  wave_banner_target_msg_len;
   Str8 wave_banner_msg;
 
+  f32 gameover_pre_delay;
+  f32 gameover_type_char_timer;
+  s32 gameover_chars_typed;
+
+  Arena_scope intro_scope;
+
   Sound avenger_bullet_sound;
   Sound crab_hurt_sound;
   Sound health_pickup_sound;
   Sound avenger_hurt_sound;
+  Sound bomb_sound;
 
   Music music;
 
@@ -720,8 +734,9 @@ b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
 
 const s32 MAX_BOMBS = 3;
 
-const Vector2 PLAYER_INITIAL_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
+const Vector2 PLAYER_INITIAL_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 1.8f };
 const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
+const float PLAYER_FRICTION = 40.0f;
 const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
 const s32 PLAYER_HEALTH = 10;
 const float PLAYER_BOUNDS_RADIUS = 20;
@@ -780,10 +795,22 @@ ENTITY_KIND_MASK_CRAB |
 ENTITY_KIND_MASK_LEADER |
 0;
 
+const float TYPING_SPEED   = 0.1f;
+
 const float WAVE_DELAY_TIME = 1.4f;
-const float WAVE_BANNER_TYPE_SPEED   = 0.1f;
 const float WAVE_BANNER_FONT_SIZE    = 80.0f;
-const float WAVE_BANNER_FONT_SPACING = 10.0f;
-const Color WAVE_BANNER_FONT_COLOR   = GOLD;
+const float WAVE_BANNER_FONT_SPACING = 8.0f;
+const Color WAVE_BANNER_FONT_COLOR   = BLACK;
+
+const float GAME_OVER_FONT_SIZE    = 100.0f;
+const float GAME_OVER_FONT_SPACING = 10.0f;
+const Color GAME_OVER_FONT_COLOR   = RED;
+
+const Color MY_GOLD = { 13, 88, 20, 255 };
+const Color MILITARY_GREEN = { 50, 60, 57 , 255 };
+const Color MUSTARD = { 234, 200, 0, 255 };
+
+const float BOMB_COOLDOWN_TIME = 15.0f;
+
 
 #endif

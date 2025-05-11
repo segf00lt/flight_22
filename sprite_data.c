@@ -80,7 +80,7 @@ const Sprite SPRITE_AVENGER_BULLET = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .fi
 const Sprite SPRITE_BOOM = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = 4, .last_frame = 6, .fps = 10, .total_frames = 3 };
 const Sprite SPRITE_BOSS_CRAB = { .flags = SPRITE_FLAG_STILL, .first_frame = 7, .last_frame = 7, .total_frames = 1 };
 const Sprite SPRITE_BULLETS = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = 8, .last_frame = 10, .fps = 8, .total_frames = 3 };
-const Sprite SPRITE_CORONEL_FU = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = 11, .last_frame = 14, .fps = 10, .total_frames = 4 };
+const Sprite SPRITE_CORONEL_FU = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = 11, .last_frame = 14, .fps = 8, .total_frames = 4 };
 const Sprite SPRITE_CRAB = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = 15, .last_frame = 18, .fps = 10, .total_frames = 4 };
 const Sprite SPRITE_CRAB_BUBBLE = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = 19, .last_frame = 20, .fps = 1, .total_frames = 2 };
 const Sprite SPRITE_CRAB_OLD = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = 21, .last_frame = 25, .fps = 6, .total_frames = 5 };
