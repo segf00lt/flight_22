@@ -3234,6 +3234,9 @@ void game_main_loop(Game *gp) {
     default:
       {
         Entity *player = entity_from_handle(gp->player_handle);
+        gp->input_flags = 0;
+        player->flags &= ~ENTITY_FLAG_DYNAMICS & ~ENTITY_FLAG_APPLY_FRICTION & ~ENTITY_FLAG_RECEIVE_COLLISION;
+        player->accel = (Vector2){0};
         player->vel = (Vector2){0};
         gp->next_state = GAME_STATE_VICTORY;
       } break;
