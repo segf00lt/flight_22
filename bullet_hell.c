@@ -1773,8 +1773,8 @@ void entity_emit_bullets(Game *gp, Entity *ep) {
             BULLET_EMITTER_RING_FLAG_USE_POINT_BAG |
             0;
 
-          emitter->cooldown_period[0] = 0.10f;
-          emitter->shots[0] = GetRandomValue(14, 25);
+          emitter->cooldown_period[0] = 0.093f;
+          emitter->shots[0] = GetRandomValue(18, 25);
 
           {
             Bullet_emitter_ring *ring = &emitter->rings[0];
@@ -2707,6 +2707,7 @@ void game_main_loop(Game *gp) {
 
                   Entity *crab = spawn_crab(gp);
 
+                  crab->death_particle_emitter = PARTICLE_EMITTER_WHITE_PUFF;
                   crab->flags |=
                     //ENTITY_FLAG_HAS_LIFETIME |
                     0;
@@ -3231,7 +3232,11 @@ void game_main_loop(Game *gp) {
       break;
 
     default:
-      gp->next_state = GAME_STATE_VICTORY;
+      {
+        Entity *player = entity_from_handle(gp->player_handle);
+        player->vel = (Vector2){0};
+        gp->next_state = GAME_STATE_VICTORY;
+      } break;
   }
 
   goto end;
@@ -3793,8 +3798,6 @@ void game_update_and_draw(Game *gp) {
                   ep->bullet_emitter.shoot = 0;
                 }
 
-              } else if(gp->state != GAME_STATE_SPAWN_PLAYER) {
-                ep->vel = (Vector2){0};
               } break;
             case ENTITY_MOVE_CONTROL_COPY_LEADER:
               {
