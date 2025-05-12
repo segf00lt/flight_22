@@ -63,6 +63,8 @@ int main(void) {
         game_unload_assets_proc(gp);
         game_load_assets_proc(gp);
 
+        gp->player->hurt_sound = gp->avenger_hurt_sound;
+
         PlayMusicStream(gp->music);
         SeekMusicStream(gp->music, t);
 

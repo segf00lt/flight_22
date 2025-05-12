@@ -14,7 +14,7 @@
 #define CC "clang"
 #define DEV_FLAGS "-g", "-O0", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-D_UNITY_BUILD_", "-DDEBUG"
 #define RELEASE_FLAGS "-O2", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-D_UNITY_BUILD_"
-#define WASM_FLAGS "-Os", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-Wno-pthreads-mem-growth", "-D_UNITY_BUILD_"
+#define WASM_FLAGS "-Os", "-O2", "-Wall", "-Wpedantic", "-Werror", "-Wno-switch", "-Wno-comment", "-Wno-format-pedantic", "-Wno-initializer-overrides", "-Wno-extra-semi", "-Wno-pthreads-mem-growth", "-D_UNITY_BUILD_"
 #define TARGET "bullet_hell.c"
 #define EXE "bullet_hell"
 #define LDFLAGS "-lraylib", "-lm", "-lpthread"

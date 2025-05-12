@@ -46,11 +46,11 @@
   X(NONE)                       \
   X(TITLE_SCREEN)               \
   X(INTRO_SCREEN)               \
+  X(VICTORY)                    \
+  X(GAME_OVER)                  \
   X(SPAWN_PLAYER)               \
   X(WAVE_TRANSITION)            \
   X(MAIN_LOOP)                  \
-  X(VICTORY)                    \
-  X(GAME_OVER)                  \
   X(DEBUG_SANDBOX)              \
 
 #define GAME_DEBUG_FLAGS       \
@@ -60,6 +60,7 @@
   X(DRAW_ALL_ENTITY_BOUNDS)    \
   X(SANDBOX_LOADED)            \
   X(SKIP_TRANSITIONS)          \
+  X(MUTE)                      \
 
 #define GAME_FLAGS         \
   X(PAUSE)                 \
@@ -107,6 +108,7 @@
   X(DIE_IF_EXIT_SCREEN)              \
   X(DIE_IF_CHILD_LIST_EMPTY)         \
   X(DIE_NOW)                         \
+  X(HAS_LIFETIME)                    \
   X(APPLY_COLLISION)                 \
   X(RECEIVE_COLLISION)               \
   X(APPLY_COLLISION_DAMAGE)          \
@@ -134,12 +136,14 @@
   X(PERIODIC_2)                       \
   X(PERIODIC_3)                       \
   X(PERIODIC_4)                       \
+  X(BOSS)                             \
 
 #define PARTICLE_EMITTERS        \
   X(SPARKS)                      \
   X(PURPLE_SPARKS)               \
   X(BLOOD_SPIT)                  \
   X(BLOOD_PUFF)                  \
+  X(MASSIVE_BLOOD_PUFF)          \
   X(PINK_PUFF)                   \
   X(GREEN_PUFF)                  \
   X(BROWN_PUFF)                  \
@@ -156,14 +160,27 @@
   X(CRAB_BASIC)                      \
   X(CRAB_BATTLE_RIFLE)               \
   X(CRAB_RADIAL_BOOM)                \
+  X(CRAB_BURST_BOOM)                 \
   X(CRAB_V_SHOT)                     \
+  X(CRAB_CLOCK_SHOT)                 \
+  X(CRAB_COUNTER_CLOCK_SHOT)         \
+  X(CRAB_BOMBER_RUN_BOTTOM)          \
+  X(CRAB_BOMBER_RUN_TOP)             \
+  X(CRAB_TENTACLE_SHOT)              \
+  X(BOSS_BOOM)                       \
+  X(BOSS_WIDE_SWEEP)                 \
+  X(BOSS_V_SWEEP)                    \
+  X(BOSS_TENTACLE)                   \
+  X(BOSS_CIRCLES)                    \
 
 #define BULLET_EMITTER_FLAGS         \
 
 #define BULLET_EMITTER_RING_FLAGS   \
+  X(MANUALLY_SET_DIR)               \
   X(LOOK_AT_PLAYER)                 \
   X(USE_POINT_BAG)                  \
   X(BURST)                          \
+  X(SPIN_WITH_SINE)                 \
 
 
 /*
@@ -415,6 +432,12 @@ struct Bullet_emitter_ring {
   f32 spin_cur_angle;
   f32 spin_start_angle;
   f32 spin_vel;
+  struct {
+    f32 t;
+    f32 amp;
+    f32 freq;
+    f32 phase;
+  } spin_sine;
 
   s32 n_arms;
   f32 arms_occupy_circle_sector_percent;
@@ -429,6 +452,7 @@ struct Bullet_emitter_ring {
   f32          bullet_curve;
   f32          bullet_curve_rolloff_vel;
   s32          bullet_damage;
+  f32          bullet_lifetime;
   Color        bullet_bounds_color;
   Color        bullet_fill_color;
   Entity_flags bullet_flags;
@@ -546,6 +570,9 @@ struct Entity {
   f32 shooting_pause_timer;
   f32 start_shooting_delay;
 
+  f32 start_shooting_delay_period;
+  s32 number_of_shots;
+
   b32 received_collision;
   s32 received_damage;
 
@@ -579,6 +606,9 @@ struct Entity {
   f32    effect_tint_timer;
 
   f32 invulnerability_timer;
+
+  f32 life_time_period;
+  f32 life_timer;
 
   Sound spawn_sound;
   Sound hurt_sound;
@@ -668,6 +698,7 @@ struct Game {
   Sound avenger_hurt_sound;
   Sound bomb_sound;
   Sound powerup_sound;
+  Sound boss_die;
 
   Music music;
 
@@ -708,6 +739,7 @@ Entity_handle handle_from_entity(Entity *ep);
 
 Entity* spawn_player(Game *gp);
 Entity* spawn_crab(Game *gp);
+Entity* spawn_boss_crab(Game *gp);
 Entity* spawn_health_pack(Game *gp);
 Entity* spawn_bomb_pack(Game *gp);
 Entity* spawn_double_bullets_pack(Game *gp);
@@ -799,12 +831,14 @@ const Vector2 ORBIT_ARM = { 0, -1 };
 
 const Entity_kind_mask ENEMY_KIND_MASK =
 ENTITY_KIND_MASK_CRAB |
+ENTITY_KIND_MASK_BOSS |
 ENTITY_KIND_MASK_LEADER |
 0;
 
-const float TYPING_SPEED   = 0.1f;
+const float TYPING_SPEED   = 0.055f;
+const float COUNTING_SPEED   = 0.0001f;
 
-const float WAVE_DELAY_TIME = 1.4f;
+const float WAVE_DELAY_TIME = 1.9f;
 const float WAVE_BANNER_FONT_SIZE    = 80.0f;
 const float WAVE_BANNER_FONT_SPACING = 8.0f;
 const Color WAVE_BANNER_FONT_COLOR   = BLACK;
