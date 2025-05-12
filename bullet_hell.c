@@ -15,6 +15,9 @@
  * globals
  */
 
+bool has_started_before = false;
+bool at_boss_level = false;
+
 bool  title_screen_key_pressed = false;
 int   title_screen_chars_deleted = 0;
 float title_screen_type_char_timer = 0;
@@ -674,7 +677,7 @@ Entity* spawn_crab_follow(Game *gp) {
 
   ep->bullet_emitter.cooldown_period = CRAB_FIRE_COOLDOWN;
 
-  //ep->fill_color = ColorBrightness(MAROON, -0.3);
+  //ep->fill_color = MAROON;
   ep->bounds_color = CRAB_BOUNDS_COLOR;
   ep->sprite = SPRITE_CRAB;
   ep->sprite_scale = CRAB_SPRITE_SCALE;
@@ -2308,6 +2311,7 @@ void game_reset(Game *gp) {
 }
 
 void game_wave_end(Game *gp) {
+  arena_clear(gp->wave_scratch);
   memory_set(&gp->phase, 0, sizeof(gp->phase));
   gp->phase_index = 0;
   gp->wave++;
@@ -2319,8 +2323,6 @@ void game_wave_end(Game *gp) {
   gp->wave_banner_msg = push_str8f(gp->wave_scratch, "WAVE %i", gp->wave+1);
   gp->wave_banner_type_dir = 1;
   gp->wave_banner_target_msg_len = gp->wave_banner_msg.len;
-
-  arena_clear(gp->wave_scratch);
 }
 
 void game_main_loop(Game *gp) {
@@ -2817,7 +2819,7 @@ void game_main_loop(Game *gp) {
 
           } break;
         case 2:
-          {
+          { /* last ghost */
             const s32 N_CRABS = 6; 
             const f32 SPAWN_CLOCK_CRAB_DELAY = 2.6f;
             const u32 DROPPED_BOMB = 1<<0;
@@ -2924,7 +2926,7 @@ void game_main_loop(Game *gp) {
                   crab->orbit_cur_angle = (float)i*step_angle;
                   crab->orbit_speed = PI*0.15;
                   crab->orbit_radius = radius;
-                  crab->sprite_tint = ColorBrightness(MAROON, -0.3);
+                  crab->sprite_tint = MAROON;
                   crab->health = CRAB_HEALTH*1.5f;
 
                   crab->leader_handle = leader_handle;
@@ -2935,7 +2937,7 @@ void game_main_loop(Game *gp) {
                 Entity *crab = spawn_crab(gp);
                 crab->pos = leader->pos;
                 crab->move_control = ENTITY_MOVE_CONTROL_COPY_LEADER;
-                crab->sprite_tint = ColorBrightness(MAROON, -0.3);
+                crab->sprite_tint = MAROON;
                 crab->shoot_control = ENTITY_SHOOT_CONTROL_PERIODIC_1;
                 crab->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB_TENTACLE_SHOT;
                 crab->leader_handle = leader_handle;
@@ -3031,7 +3033,7 @@ void game_main_loop(Game *gp) {
                     crab->move_control = ENTITY_MOVE_CONTROL_GOTO_WAYPOINT;
                     crab->shoot_control = ENTITY_SHOOT_CONTROL_PERIODIC_2;
                     crab->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB_V_SHOT;
-                    crab->sprite_tint = ColorBrightness(MAROON, -0.3);
+                    crab->sprite_tint = MAROON;
 
                   } else {
                     *enemy_snake_spawn_timer += gp->timestep;
@@ -3076,7 +3078,7 @@ void game_main_loop(Game *gp) {
                           crab->orbit_cur_angle = (float)i*step_angle;
                           crab->orbit_speed = -PI*0.15;
                           crab->orbit_radius = radius;
-                          crab->sprite_tint = ColorBrightness(MAROON, -0.3);
+                          crab->sprite_tint = MAROON;
 
                           crab->leader_handle = leader_handle;
                           entity_list_append(gp, leader->child_list, crab);
@@ -3089,7 +3091,7 @@ void game_main_loop(Game *gp) {
                         crab->shoot_control = ENTITY_SHOOT_CONTROL_PERIODIC_3;
                         crab->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB_RADIAL_BOOM;
                         crab->leader_handle = leader_handle;
-                        crab->sprite_tint = ColorBrightness(MAROON, -0.3);
+                        crab->sprite_tint = MAROON;
                         entity_list_append(gp, leader->child_list, crab);
 
                       } /* spawn_orbiting_crabs */
@@ -3139,7 +3141,7 @@ void game_main_loop(Game *gp) {
                           crab->orbit_cur_angle = (float)i*step_angle;
                           crab->orbit_speed = PI*0.15;
                           crab->orbit_radius = radius;
-                          crab->sprite_tint = ColorBrightness(MAROON, -0.3);
+                          crab->sprite_tint = MAROON;
 
                           crab->leader_handle = leader_handle;
                           entity_list_append(gp, leader->child_list, crab);
@@ -3152,7 +3154,7 @@ void game_main_loop(Game *gp) {
                         crab->shoot_control = ENTITY_SHOOT_CONTROL_PERIODIC_4;
                         crab->bullet_emitter.kind = BULLET_EMITTER_KIND_CRAB_RADIAL_BOOM;
                         crab->leader_handle = leader_handle;
-                        crab->sprite_tint = ColorBrightness(MAROON, -0.3);
+                        crab->sprite_tint = MAROON;
                         entity_list_append(gp, leader->child_list, crab);
 
                       } /* spawn_orbiting_crabs */
@@ -3188,6 +3190,7 @@ void game_main_loop(Game *gp) {
 
                 *flags |= SPAWNED_ENEMY;
                 spawn_boss_crab(gp);
+                at_boss_level = true;
 
               } else {
 
@@ -3234,7 +3237,7 @@ void game_main_loop(Game *gp) {
   goto end;
 
 phase_end:
-  if(!(gp->wave == 2 && gp->phase_index == 2)) {
+  if(!at_boss_level) {
     int v = GetRandomValue(0, 5);
 
     if(v == 0) {
@@ -3257,7 +3260,7 @@ phase_end:
   goto end;
 
 wave_end:
-  if(gp->wave != 2) {
+  if(!at_boss_level) {
     spawn_health_pack(gp);
     game_wave_end(gp);
   } else {
@@ -3323,7 +3326,7 @@ void game_update_and_draw(Game *gp) {
     }
 
     if(IsKeyPressed(KEY_ESCAPE)) {
-      if(gp->state > GAME_STATE_INTRO_SCREEN) {
+      if(gp->state >= GAME_STATE_SPAWN_PLAYER) {
         gp->input_flags |= INPUT_FLAG_PAUSE;
       }
     }
@@ -3411,8 +3414,8 @@ void game_update_and_draw(Game *gp) {
           {
 #ifdef DEBUG
 
-            gp->wave = 2;
-            gp->phase_index = 2;
+            gp->wave = 0;
+            gp->phase_index = 0;
 
             gp->debug_flags |=
               GAME_DEBUG_FLAG_DEBUG_UI |
@@ -3430,10 +3433,17 @@ void game_update_and_draw(Game *gp) {
             gp->wave = 0;
             gp->phase_index = 0;
 
-            gp->next_state = GAME_STATE_TITLE_SCREEN;
+            if(!has_started_before) {
+              gp->next_state = GAME_STATE_TITLE_SCREEN;
+              has_started_before = true;
+            } else {
+              gp->next_state = GAME_STATE_SPAWN_PLAYER;
+            }
 #endif
 
             { /* init globals */
+
+              at_boss_level = false;
 
               title_screen_key_pressed = false;
               title_screen_chars_deleted = 0;

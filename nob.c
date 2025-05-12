@@ -434,10 +434,10 @@ int main(int argc, char **argv) {
   run_metaprogram();
   run_tags();
 
-  //if(!build_release()) return 1;
-  //if(!build_itch()) return 1;
+  if(!build_release()) return 1;
+  if(!build_itch()) return 1;
   //if(!build_wasm()) return 1;
-  if(!build_hot_reload()) return 1;
+  //if(!build_hot_reload()) return 1;
   //if(!build_static()) return 1;
 
 
