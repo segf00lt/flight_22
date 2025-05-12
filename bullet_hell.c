@@ -1777,7 +1777,7 @@ void game_load_assets(Game *gp) {
   gp->bomb_sound           = LoadSound("./sounds/bomb_sound.wav");
   gp->powerup_sound        = LoadSound("./sounds/powerup.wav");
 
-  gp->music = LoadMusicStream("./sounds/synthwave.wav");
+  gp->music = LoadMusicStream("./sounds/synthwave.ogg");
 
 }
 
@@ -2543,8 +2543,8 @@ end:
 void game_update_and_draw(Game *gp) {
 
   if(IsMusicStreamPlaying(gp->music)) {
-    if(GetMusicTimePlayed(gp->music) >= 180.0f) {
-      SeekMusicStream(gp->music, 60.0f);
+    if(GetMusicTimePlayed(gp->music) >= 160.58f) {
+      SeekMusicStream(gp->music, 32.630f);
     }
 
     SetMusicVolume(gp->music, 0.10f);
@@ -2676,7 +2676,7 @@ void game_update_and_draw(Game *gp) {
 
             gp->debug_flags |=
               GAME_DEBUG_FLAG_DEBUG_UI |
-              //GAME_DEBUG_FLAG_PLAYER_INVINCIBLE |
+              GAME_DEBUG_FLAG_PLAYER_INVINCIBLE |
               GAME_DEBUG_FLAG_SKIP_TRANSITIONS |
               0;
 
