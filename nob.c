@@ -85,7 +85,7 @@ int build_raylib_shared(void);
 int build_raylib_web(void);
 int generate_vim_project_file(void);
 int generate_nob_project_file(void);
-int load_project_file(void);
+int load_nob_project_file(void);
 
 char _project_root_path[OS_PATH_LEN];
 Str8 project_root_path;
@@ -300,7 +300,7 @@ int run_tags(void) {
 
 #elif defined(OS_MAC)
 
-char project_file[] =
+char vim_project_file[] =
   "let project_root = getcwd()\n"
   "let project_build = project_root . '/nob'\n"
   "let project_exe = '/bullet_hell'\n"
@@ -312,12 +312,12 @@ char project_file[] =
   "nnoremap <F7> :call jobstart('open -a Terminal ' . project_root, { 'detach':v:true })<CR>\n"
   "nnoremap <F8> :call chdir(project_root)<CR>\n"
   "nnoremap <F9> :wa<CR>:make<CR>\n"
-  "nnoremap <F10> :call StartScratchJob(project_run)<CR>\n"
+  "nnoremap <F5> :call StartScratchJob(project_run)<CR>\n"
   "nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n";
 
 #elif defined(OS_LINUX)
 
-char project_file[] =
+char vim_project_file[] =
   "let project_root = getcwd()\n"
   "let project_build = project_root . '/nob'\n"
   "let project_exe = '/bullet_hell'\n"
@@ -329,7 +329,7 @@ char project_file[] =
   "nnoremap <F7> :call jobstart('alacritty --working-directory ' . project_root, { 'detach':v:true })<CR>\n"
   "nnoremap <F8> :call chdir(project_root)<CR>\n"
   "nnoremap <F9> :wa<CR>:make<CR>\n"
-  "nnoremap <F10> :call StartScratchJob(project_run)<CR>\n"
+  "nnoremap <F5> :call StartScratchJob(project_run)<CR>\n"
   "nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n"
   "nnoremap <F12> :call jobstart('aseprite', { 'detach':v:true })<CR>\n";
 
@@ -339,12 +339,12 @@ char project_file[] =
 
 int generate_vim_project_file(void) {
   nob_log(NOB_INFO, "generating vim project file");
-  Str8 path_str = scratch_push_str8f("%s/.project.vim", project_root_path);
-  ASSERT(nob_write_entire_file((char*)path_str.s, project_file, memory_strlen(project_file)));
+  Str8 path_str = scratch_push_str8f("%S/.project.vim", project_root_path);
+  ASSERT(nob_write_entire_file((char*)path_str.s, vim_project_file, memory_strlen(vim_project_file)));
   return 1;
 }
 
-int generate_nob_project_file(void) {
+int generate_nob_vim_project_file(void) {
   nob_log(NOB_INFO, "generating nob project file");
   Str8 root_path = scratch_push_str8f("root = %S\n", os_get_current_dir());
 
@@ -356,7 +356,10 @@ int generate_nob_project_file(void) {
 int bootstrap_project(void) {
   nob_log(NOB_INFO, "bootstrapping project");
 
-  generate_nob_project_file();
+  generate_nob_vim_project_file();
+
+  load_nob_project_file();
+
   generate_vim_project_file();
 
   if(!build_raylib()) return 1;
@@ -364,7 +367,7 @@ int bootstrap_project(void) {
 }
 
 // TODO make nob work in subdirs of the project dir
-int load_project_file(void) {
+int load_nob_project_file(void) {
   Nob_String_Builder sb = {0};
 
   Str8 cur_dir = os_get_current_dir();
@@ -410,22 +413,21 @@ int main(int argc, char **argv) {
 
 #if 0
   {
-    //generate_nob_project_file();
-    //bootstrap_project();
 
     NOB_GO_REBUILD_URSELF(argc, argv);
+
+    bootstrap_project();
 
     return 0;
   }
 #endif
 
-  load_project_file();
-
-  NOB_GO_REBUILD_URSELF(argc, argv);
+  load_nob_project_file();
 
   ASSERT(os_set_current_dir(project_root_path));
 
-  //if(!generate_vim_project_file()) return 1;
+  NOB_GO_REBUILD_URSELF(argc, argv);
+
   //if(!build_raylib()) return 1;
   //if(!build_raylib_shared()) return 1;
   //if(!build_raylib_web()) return 1;
@@ -434,10 +436,10 @@ int main(int argc, char **argv) {
   run_metaprogram();
   run_tags();
 
-  if(!build_release()) return 1;
-  if(!build_itch()) return 1;
+  //if(!build_release()) return 1;
+  //if(!build_itch()) return 1;
   //if(!build_wasm()) return 1;
-  //if(!build_hot_reload()) return 1;
+  if(!build_hot_reload()) return 1;
   //if(!build_static()) return 1;
 
 
