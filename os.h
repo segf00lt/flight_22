@@ -18,6 +18,7 @@ b32 os_set_current_dir(Str8 dir_path);
 b32 os_set_current_dir_cstr(char *dir_path_cstr);
 
 b32 os_move_file(Str8 old_path, Str8 new_path);
+b32 os_remove_file(Str8 path);
 
 
 #endif
@@ -125,6 +126,18 @@ b32 os_move_file(Str8 old_path, Str8 new_path) {
   return result;
 }
 
+b32 os_remove_file(Str8 path) {
+  b32 result = 1;
+
+  scratch_scope() {
+    const char *path_cstr = scratch_push_cstr_copy_str8(path);
+    if(remove(path_cstr) < 0) {
+      result = 0;
+    }
+  }
+
+  return result;
+}
 
 #elif defined(OS_WINDOWS)
 
@@ -146,6 +159,32 @@ b32 os_set_current_dir_cstr(char *dir_path_cstr) {
   b32 result = 0;
 
   result = SetCurrentDirectory(dir_path_cstr);
+
+  return result;
+}
+
+b32 os_move_file(Str8 old_path, Str8 new_path) {
+  b32 result = 0;
+
+  scratch_scope() {
+    const char *old_path_cstr = scratch_push_cstr_copy_str8(old_path); 
+    const char *new_path_cstr = scratch_push_cstr_copy_str8(new_path); 
+
+    result = MoveFileEx(old_path_cstr, new_path_cstr, MOVEFILE_REPLACE_EXISTING);
+  }
+
+  return result;
+}
+
+b32 os_remove_file(Str8 path) {
+  b32 result = 1;
+
+  scratch_scope() {
+    const char *path_cstr = scratch_push_cstr_copy_str8(path);
+    if(!DeleteFileA(path_cstr)) {
+      result = 0;
+    }
+  }
 
   return result;
 }

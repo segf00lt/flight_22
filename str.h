@@ -33,6 +33,8 @@ b32 str8_match(Str8 a_str, Str8 b_str);
 #define str8_match_lit(a_lit, b) str8_match(str8_lit(a_lit), b)
 b32 str8_starts_with(Str8 str, Str8 start);
 b32 str8_ends_with(Str8 str, Str8 end);
+b32 str8_contains(Str8 str, Str8 substr);
+s64 str8_find(Str8 haystack, Str8 needle);
 
 Str8_list str8_split_by_string(Arena *a, Str8 str, Str8 sep);
 #define str8_split_by_string_lit(a, str, sep) str8_split_by_string(a, str, str8_lit(sep))
@@ -122,6 +124,30 @@ b32 str8_match(Str8 a, Str8 b) {
   } else {
     return (b32)(memory_compare(a.s, b.s, a.len) == 0);
   }
+}
+
+b32 str8_contains(Str8 str, Str8 substr) {
+  s64 found = str8_find(str, substr);
+  b32 result = (found >= 0);
+  return result;
+}
+
+s64 str8_find(Str8 haystack, Str8 needle) {
+  s64 found = -1;
+
+  for(s64 i = 0; i < haystack.len - needle.len; i++) {
+    for(s64 j = 0; j < needle.len; j++) {
+      if(haystack.s[i+j] != needle.s[j]) {
+        goto end;
+      }
+    }
+
+    found = i;
+  }
+
+end:
+
+  return found;
 }
 
 b32 str8_starts_with(Str8 str, Str8 start) {

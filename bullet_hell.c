@@ -4922,13 +4922,17 @@ update_end:;
 
     ClearBackground(BLACK);
 
-    float scale = fminf((float)GetScreenWidth() / WINDOW_WIDTH,
+    float scale = fminf(
+        (float)GetScreenWidth() / WINDOW_WIDTH,
         (float)GetScreenHeight() / WINDOW_HEIGHT);
-    if(scale < 1.0) {
-      scale = 0.5;
-    } else {
-      scale = roundf(scale);
-    }
+
+    scale = ceilf(scale);
+    //if(scale < 1.0) {
+    //  //scale = 1.0;
+    //  scale = roundf(scale);
+    //} else {
+    //  scale = roundf(scale);
+    //}
     int offset_x = (GetScreenWidth() - (int)(WINDOW_WIDTH * scale)) >> 1;
     int offset_y = (GetScreenHeight() - (int)(WINDOW_HEIGHT * scale)) >> 1;
 
@@ -4956,6 +4960,8 @@ update_end:;
         "particle_pos: %i\n"
         "screen width: %i\n"
         "screen height: %i\n"
+        "render width: %i\n"
+        "render height: %i\n"
         "player pos: { x = %.1f, y = %.1f }\n"
         "wave: %i\n"
         "phase: %i\n"
@@ -4973,6 +4979,8 @@ update_end:;
           gp->particles_pos,
           GetScreenWidth(),
           GetScreenHeight(),
+          GetRenderWidth(),
+          GetRenderHeight(),
           gp->player ? gp->player->pos.x : 0,
           gp->player ? gp->player->pos.y : 0,
           gp->wave+1,

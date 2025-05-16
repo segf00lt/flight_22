@@ -31,6 +31,16 @@
 
 #if defined(OS_WINDOWS)
 #error "windows support not implemented"
+#elif defined(OS_MAC)
+#define EMCC "/opt/homebrew/bin/emcc"
+#elif defined(OS_LINUX)
+#define EMCC "emcc"
+#else
+#error "unsupported operating system"
+#endif
+
+#if defined(OS_WINDOWS)
+#error "windows support not implemented"
 
 #elif defined(OS_MAC)
 #define STATIC_BUILD_LDFLAGS "-lm", "-framework", "IOKit", "-framework", "Cocoa", "-framework", "OpenGL"
@@ -52,11 +62,13 @@
 
 #define GAME_MODULE "bullet_hell.dylib"
 #define SHARED "-dynamiclib"
+#define SHARED_EXT ".dylib"
 
 #elif defined(OS_LINUX)
 
 #define GAME_MODULE "bullet_hell.so"
 #define SHARED "-shared"
+#define SHARED_EXT ".so"
 
 #else
 #error "unsupported operating system"
@@ -82,13 +94,133 @@ int build_itch(void);
 int run_tags(void);
 int build_raylib(void);
 int build_raylib_shared(void);
+int build_raylib_static(void);
 int build_raylib_web(void);
 int generate_vim_project_file(void);
 int generate_nob_project_file(void);
 int load_nob_project_file(void);
+int build_raylib_new(void);
 
 char _project_root_path[OS_PATH_LEN];
 Str8 project_root_path;
+
+int build_raylib_new(void) {
+  nob_log(NOB_INFO, "building raylib");
+
+  Nob_Cmd cmd = {0};
+
+  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
+
+  ASSERT(nob_mkdir_if_not_exists("./build"));
+
+  Nob_File_Paths files_in_cur_dir = {0};
+
+  ASSERT(nob_read_entire_dir(".", &files_in_cur_dir));
+
+  {
+    nob_log(NOB_INFO, "cleaning build artifacts");
+
+    for(int i = 0; i < files_in_cur_dir.count; i++) scratch_scope() {
+      Str8 f = scratch_push_str8_copy_cstr(files_in_cur_dir.items[i]);
+
+
+      if(str8_ends_with(f, str8_lit(".o")) || str8_ends_with(f, str8_lit(".a")) || str8_ends_with(f, str8_lit(".dylib")) || str8_contains(f, str8_lit(".so"))) {
+        ASSERT(os_remove_file(f));
+      }
+
+    }
+
+  }
+
+  /*
+     clang -c rshapes.c -Wall -D_GNU_SOURCE -DPLATFORM_DESKTOP_GLFW -DGRAPHICS_API_OPENGL_33 -Wno-missing-braces -Werror=pointer-arith -fno-strict-aliasing -std=c99 -O1 -Werror=implicit-function-declaration  -I.  -Iexternal/glfw/include
+     clang -c rtextures.c -Wall -D_GNU_SOURCE -DPLATFORM_DESKTOP_GLFW -DGRAPHICS_API_OPENGL_33 -Wno-missing-braces -Werror=pointer-arith -fno-strict-aliasing -std=c99 -O1 -Werror=implicit-function-declaration  -I.  -Iexternal/glfw/include
+     clang -c rtext.c -Wall -D_GNU_SOURCE -DPLATFORM_DESKTOP_GLFW -DGRAPHICS_API_OPENGL_33 -Wno-missing-braces -Werror=pointer-arith -fno-strict-aliasing -std=c99 -O1 -Werror=implicit-function-declaration  -I.  -Iexternal/glfw/include
+     clang -c utils.c -Wall -D_GNU_SOURCE -DPLATFORM_DESKTOP_GLFW -DGRAPHICS_API_OPENGL_33 -Wno-missing-braces -Werror=pointer-arith -fno-strict-aliasing -std=c99 -O1 -Werror=implicit-function-declaration  -I.  -Iexternal/glfw/include
+     clang -x objective-c -c rglfw.c -Wall -D_GNU_SOURCE -DPLATFORM_DESKTOP_GLFW -DGRAPHICS_API_OPENGL_33 -Wno-missing-braces -Werror=pointer-arith -fno-strict-aliasing -std=c99 -O1 -Werror=implicit-function-declaration  -I.  -Iexternal/glfw/include -U_GNU_SOURCE
+     clang -c rmodels.c -Wall -D_GNU_SOURCE -DPLATFORM_DESKTOP_GLFW -DGRAPHICS_API_OPENGL_33 -Wno-missing-braces -Werror=pointer-arith -fno-strict-aliasing -std=c99 -O1 -Werror=implicit-function-declaration  -I.  -Iexternal/glfw/include
+     clang -c raudio.c -Wall -D_GNU_SOURCE -DPLATFORM_DESKTOP_GLFW -DGRAPHICS_API_OPENGL_33 -Wno-missing-braces -Werror=pointer-arith -fno-strict-aliasing -std=c99 -O1 -Werror=implicit-function-declaration  -I.  -Iexternal/glfw/include
+     ar rcs ./libraylib.a rcore.o rshapes.o rtextures.o rtext.o utils.o rglfw.o rmodels.o raudio.o
+     */
+
+  char *raylib_files[] = {
+    "rshapes",
+    "rtextures",
+    "rtext",
+    "utils",
+    "rglfw",
+    "rmodels",
+    "raudio",
+  };
+
+  char *raylib_static_cflags[] = {
+    "-Wall",
+    "-D_GNU_SOURCE",
+    "-DPLATFORM_DESKTOP_GLFW",
+    "-DGRAPHICS_API_OPENGL_33",
+    "-Wno-missing-braces",
+    "-Werror=pointer-arith",
+    "-fno-strict-aliasing",
+    "-std=c99",
+    "-O1",
+    "-Werror=implicit-function-declaration",
+  };
+
+  char *raylib_static_include_flags[] = {
+    "-I.",
+    "-Iexternal/glfw/include",
+  };
+
+  Nob_Proc compile_procs[ARRLEN(raylib_files)] = {0};
+
+  for(int i = 0; i < ARRLEN(raylib_files); i++) scratch_scope() {
+
+    Str8 f = scratch_push_str8f("%s.c", raylib_files[i]);
+    char *f_cstr = (char*)(f.s);
+
+    if(str8_match_lit("rglfw.c", f)) {
+#if defined(OS_MAC)
+      nob_cmd_append(&cmd, CC, "-x", "objective-c", "-c", f_cstr);
+      nob_da_append_many(&cmd, raylib_static_cflags, ARRLEN(raylib_static_cflags));
+      nob_da_append_many(&cmd, raylib_static_include_flags, ARRLEN(raylib_static_include_flags));
+      nob_cmd_append(&cmd, "-U_GNU_SOURCE");
+#elif defined(OS_LINUX)
+      nob_cmd_append(&cmd, CC, "-c", f_cstr);
+      nob_da_append_many(&cmd, raylib_static_cflags, ARRLEN(raylib_static_cflags));
+      nob_da_append_many(&cmd, raylib_static_include_flags, ARRLEN(raylib_static_include_flags));
+#elif defined(OS_WINDOWS)
+#error windows not supported yet
+#endif
+    } else {
+      nob_cmd_append(&cmd, CC, "-c", f_cstr);
+      nob_da_append_many(&cmd, raylib_static_cflags, ARRLEN(raylib_static_cflags));
+      nob_da_append_many(&cmd, raylib_static_include_flags, ARRLEN(raylib_static_include_flags));
+    }
+
+    compile_procs[i] = nob_cmd_run_async_and_reset(&cmd);
+
+  }
+
+  for(int i = 0; i < ARRLEN(compile_procs); i++) {
+    ASSERT(nob_proc_wait(compile_procs[i]));
+  }
+
+  nob_cmd_append(&cmd, "ar", "rcs", "./libraylib.a");
+  for(int i = 0; i < ARRLEN(raylib_files); i++) scratch_scope() {
+
+    Str8 f = scratch_push_str8f("%s.o", raylib_files[i]);
+    char *f_cstr = (char*)(f.s);
+
+    nob_cmd_append(&cmd, f_cstr);
+
+  }
+
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  ASSERT(os_move_file(str8_lit("./libraylib.a"), str8_lit("./build/libraylib.a")));
+
+  return 1;
+}
 
 int build_raylib(void) {
   nob_log(NOB_INFO, "building raylib");
@@ -112,7 +244,7 @@ int build_raylib(void) {
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  os_move_file(str8_lit("./libraylib.a"), str8_lit("./build/libraylib.a"));
+  ASSERT(os_move_file(str8_lit("./libraylib.a"), str8_lit("./build/libraylib.a")));
 
   nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
@@ -121,9 +253,43 @@ int build_raylib(void) {
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  os_move_file(str8_lit("./libraylib.so.5.5.0"), str8_lit("./build/libraylib.so.5.5.0"));
-  os_move_file(str8_lit("./libraylib.so.550"), str8_lit("./build/libraylib.so.550"));
-  os_move_file(str8_lit("./libraylib.so"), str8_lit("./build/libraylib.so"));
+#if defined(OS_WINDOWS)
+#error windows not supported yet
+#elif defined(OS_MAC)
+  ASSERT(os_move_file(str8_lit("./libraylib.5.5.0.dylib"), str8_lit("./build/libraylib.5.5.0.dylib")));
+  ASSERT(os_move_file(str8_lit("./libraylib.550.dylib"), str8_lit("./build/libraylib.550.dylib")));
+  ASSERT(os_move_file(str8_lit("./libraylib.dylib"), str8_lit("./build/libraylib.dylib")));
+#elif defined(OS_LINUX)
+  ASSERT(os_move_file(str8_lit("./libraylib.so.5.5.0"), str8_lit("./build/libraylib.so.5.5.0")));
+  ASSERT(os_move_file(str8_lit("./libraylib.so.550"), str8_lit("./build/libraylib.so.550")));
+  ASSERT(os_move_file(str8_lit("./libraylib.so"), str8_lit("./build/libraylib.so")));
+#endif
+
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  ASSERT(os_set_current_dir(project_root_path));
+
+  return 1;
+}
+
+int build_raylib_static(void) {
+  nob_log(NOB_INFO, "building raylib shared");
+
+  Nob_Cmd cmd = {0};
+
+  ASSERT(nob_mkdir_if_not_exists("./third_party/raylib/build"));
+
+  ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
+
+  // static
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
+  os_move_file(str8_lit("./libraylib.a"), str8_lit("./build/libraylib.a"));
 
   nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
@@ -143,12 +309,23 @@ int build_raylib_shared(void) {
   ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
 
   // shared
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_DESKTOP", "RAYLIB_LIBTYPE=SHARED");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
-  os_move_file(str8_lit("./libraylib.so.5.5.0"), str8_lit("./build/libraylib.so.5.5.0"));
-  os_move_file(str8_lit("./libraylib.so.550"), str8_lit("./build/libraylib.so.550"));
-  os_move_file(str8_lit("./libraylib.so"), str8_lit("./build/libraylib.so"));
+#if defined(OS_WINDOWS)
+#error windows not supported yet
+#elif defined(OS_MAC)
+  ASSERT(os_move_file(str8_lit("./libraylib.5.5.0.dylib"), str8_lit("./build/libraylib.5.5.0.dylib")));
+  ASSERT(os_move_file(str8_lit("./libraylib.550.dylib"), str8_lit("./build/libraylib.550.dylib")));
+  ASSERT(os_move_file(str8_lit("./libraylib.dylib"), str8_lit("./build/libraylib.dylib")));
+#elif defined(OS_LINUX)
+  ASSERT(os_move_file(str8_lit("./libraylib.so.5.5.0"), str8_lit("./build/libraylib.so.5.5.0")));
+  ASSERT(os_move_file(str8_lit("./libraylib.so.550"), str8_lit("./build/libraylib.so.550")));
+  ASSERT(os_move_file(str8_lit("./libraylib.so"), str8_lit("./build/libraylib.so")));
+#endif
 
   nob_cmd_append(&cmd, "make", "clean");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
@@ -168,6 +345,9 @@ int build_raylib_web(void) {
   ASSERT(os_set_current_dir_cstr("./third_party/raylib"));
 
   // web
+  nob_cmd_append(&cmd, "make", "clean");
+  if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
+
   nob_cmd_append(&cmd, "make", "RAYLIB_SRC_PATH=.", "PLATFORM=PLATFORM_WEB");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
@@ -198,7 +378,7 @@ int run_metaprogram(void) {
   nob_log(NOB_INFO, "running metaprogram");
 
   Nob_Cmd cmd = {0};
-  nob_cmd_append(&cmd, scratch_push_str8f("%S/metaprogram", project_root_path).s);
+  nob_cmd_append(&cmd, scratch_push_cstrf("%S/metaprogram", project_root_path));
 
   if(!nob_cmd_run_sync(cmd)) return 0;
 
@@ -258,7 +438,7 @@ int build_wasm(void) {
   ASSERT(nob_mkdir_if_not_exists("./build/wasm"));
 
   char *target = "wasm_main.c";
-  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/islands.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=0", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-o", "./build/wasm/bullet_hell.js", "-lpthread");
+  nob_cmd_append(&cmd, EMCC, WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/islands.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=0", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-o", "./build/wasm/bullet_hell.js", "-lpthread");
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   return 1;
@@ -273,7 +453,7 @@ int build_itch(void) {
   ASSERT(nob_mkdir_if_not_exists("./build/itch"));
 
   char *target = "wasm_main.c";
-  nob_cmd_append(&cmd, "emcc", WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/the_sea.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall,HEAPF32", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "--shell-file", "itch_shell.html", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=1", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-sASYNCIFY", "-o", "./build/itch/index.html", "-pthread", "-sALLOW_MEMORY_GROWTH",scratch_push_str8f("-sSTACK_SIZE=%lu", MB(10)).s);
+  nob_cmd_append(&cmd, EMCC, WASM_FLAGS, "--preload-file", "./aseprite/atlas.png", "--preload-file", "./sprites/the_sea.png", "--preload-file", "./sounds/", target, RAYLIB_STATIC_LINK_WASM_OPTIONS, RAYLIB_STATIC_LINK_WASM_OPTIONS, "-sEXPORTED_RUNTIME_METHODS=ccall,HEAPF32", "-sUSE_GLFW=3", "-sFORCE_FILESYSTEM=1", "-sMODULARIZE=1", "-sWASM_WORKERS=1", "-sUSE_PTHREADS=1", "-sWASM=1", "-sEXPORT_ES6=1", "--shell-file", "itch_shell.html", "-sGL_ENABLE_GET_PROC_ADDRESS", "-sINVOKE_RUN=1", "-sNO_EXIT_RUNTIME=1", "-sMINIFY_HTML=0", "-sASYNCIFY", "-o", "./build/itch/index.html", "-pthread", "-sALLOW_MEMORY_GROWTH",scratch_push_cstrf("-sSTACK_SIZE=%lu", MB(10)));
   if(!nob_cmd_run_sync_and_reset(&cmd)) return 0;
 
   nob_cmd_append(&cmd, "sh", "-c", "zip ./build/itch/flight_22.zip ./build/itch/*");
@@ -312,7 +492,7 @@ char vim_project_file[] =
   "nnoremap <F7> :call jobstart('open -a Terminal ' . project_root, { 'detach':v:true })<CR>\n"
   "nnoremap <F8> :call chdir(project_root)<CR>\n"
   "nnoremap <F9> :wa<CR>:make<CR>\n"
-  "nnoremap <F5> :call StartScratchJob(project_run)<CR>\n"
+  "nnoremap <F10> :call StartScratchJob(project_run)<CR>\n"
   "nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n";
 
 #elif defined(OS_LINUX)
@@ -329,7 +509,7 @@ char vim_project_file[] =
   "nnoremap <F7> :call jobstart('alacritty --working-directory ' . project_root, { 'detach':v:true })<CR>\n"
   "nnoremap <F8> :call chdir(project_root)<CR>\n"
   "nnoremap <F9> :wa<CR>:make<CR>\n"
-  "nnoremap <F5> :call StartScratchJob(project_run)<CR>\n"
+  "nnoremap <F10> :call StartScratchJob(project_run)<CR>\n"
   "nnoremap <F11> :call jobstart(project_debug, { 'detach':v:true })<CR>\n"
   "nnoremap <F12> :call jobstart('aseprite', { 'detach':v:true })<CR>\n";
 
@@ -362,8 +542,13 @@ int bootstrap_project(void) {
 
   generate_vim_project_file();
 
-  if(!build_raylib()) return 1;
-  if(!build_metaprogram()) return 1;
+  //if(!build_raylib()) return 0;
+  //if(!build_raylib_web()) return 0;
+  if(!build_raylib_static()) return 0;
+  if(!build_raylib_shared()) return 0;
+  if(!build_metaprogram()) return 0;
+
+  return 1;
 }
 
 // TODO make nob work in subdirs of the project dir
@@ -429,17 +614,19 @@ int main(int argc, char **argv) {
   NOB_GO_REBUILD_URSELF(argc, argv);
 
   //if(!build_raylib()) return 1;
+  if(!build_raylib_new()) return 1;
   //if(!build_raylib_shared()) return 1;
+  //if(!build_raylib_static()) return 1;
   //if(!build_raylib_web()) return 1;
   //if(!build_metaprogram()) return 1;
 
-  run_metaprogram();
-  run_tags();
+  //run_metaprogram();
+  //run_tags();
 
   //if(!build_release()) return 1;
   //if(!build_itch()) return 1;
   //if(!build_wasm()) return 1;
-  if(!build_hot_reload()) return 1;
+  //if(!build_hot_reload()) return 1;
   //if(!build_static()) return 1;
 
 
