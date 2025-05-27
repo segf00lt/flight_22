@@ -1,4 +1,858 @@
-#include "bullet_hell.h"
+#include "raylib.h"
+#include "raymath.h"
+#include "rlgl.h"
+
+#include "basic.h"
+#include "arena.h"
+#include "str.h"
+#include "context.h"
+#include "array.h"
+#include "sprite.h"
+#include "stb_sprintf.h"
+
+
+/*
+ * macro constants
+ */
+
+#define TARGET_FPS 60
+#define TARGET_FRAME_TIME ((float)(1.0f / (float)TARGET_FPS))
+
+#define WINDOW_SCALE 320
+#define WINDOW_WIDTH  (4*WINDOW_SCALE)
+#define WINDOW_HEIGHT (3*WINDOW_SCALE)
+
+#define WINDOW_SIZE ((Vector2){ WINDOW_WIDTH, WINDOW_HEIGHT })
+#define WINDOW_RECT ((Rectangle){0, 0, WINDOW_WIDTH, WINDOW_HEIGHT})
+
+#define MAX_ENTITIES 4096
+#define MAX_PARTICLES 8192
+#define MAX_BULLET_EMITTER_RINGS 4
+#define MAX_BULLETS_IN_BAG 8
+#define MAX_LEADERS 32
+#define MAX_ENTITY_LISTS 16
+
+#define BLOOD ((Color){ 255, 0, 0, 255 })
+
+
+/*
+ * tables
+ */
+
+#define GAME_STATES             \
+  X(NONE)                       \
+  X(TITLE_SCREEN)               \
+  X(INTRO_SCREEN)               \
+  X(GAME_OVER)                  \
+  X(SPAWN_PLAYER)               \
+  X(WAVE_TRANSITION)            \
+  X(MAIN_LOOP)                  \
+  X(VICTORY)                    \
+  X(DEBUG_SANDBOX)              \
+
+#define GAME_DEBUG_FLAGS       \
+  X(DEBUG_UI)                  \
+  X(PLAYER_INVINCIBLE)         \
+  X(DRAW_ALL_ENTITY_BOUNDS)    \
+  X(SANDBOX_LOADED)            \
+  X(SKIP_TRANSITIONS)          \
+  X(MUTE)                      \
+
+#define GAME_FLAGS         \
+  X(PAUSE)                 \
+  X(PLAYER_CANNOT_SHOOT)   \
+  X(DO_THE_CRAB_WALK)      \
+
+#define INPUT_FLAGS         \
+  X(ANY)                    \
+  X(MOVE_FORWARD)           \
+  X(MOVE_BACKWARD)          \
+  X(MOVE_LEFT)              \
+  X(MOVE_RIGHT)             \
+  X(SHOOT)                  \
+  X(BOMB)                   \
+  X(SLOW_MOVE)              \
+  X(PAUSE)                  \
+
+#define ENTITY_KINDS           \
+  X(PLAYER)                    \
+  X(LEADER)                    \
+  X(PLAYER_BULLET)             \
+  X(ENEMY_BULLET)              \
+  X(CRAB)                      \
+  X(HEALTH_PACK)               \
+  X(BOMB_PACK)                 \
+  X(DOUBLE_BULLETS_PACK)       \
+  X(TRIPLE_BULLETS_PACK)       \
+  X(QUINTA_BULLETS_PACK)       \
+  X(BOSS)                      \
+
+#define ENTITY_ORDERS   \
+  X(FIRST)              \
+  X(LAST)               \
+
+#define ENTITY_FLAGS                 \
+  X(DYNAMICS)                        \
+  X(DYNAMICS_HAS_CURVE)              \
+  X(HAS_SPRITE)                      \
+  X(APPLY_FRICTION)                  \
+  X(FILL_BOUNDS)                     \
+  X(HAS_BULLET_EMITTER)              \
+  X(NOT_ON_SCREEN)                   \
+  X(ON_SCREEN)                       \
+  X(DIE_IF_OFFSCREEN)                \
+  X(DIE_IF_EXIT_SCREEN)              \
+  X(DIE_IF_CHILD_LIST_EMPTY)         \
+  X(DIE_NOW)                         \
+  X(HAS_LIFETIME)                    \
+  X(APPLY_COLLISION)                 \
+  X(RECEIVE_COLLISION)               \
+  X(APPLY_COLLISION_DAMAGE)          \
+  X(RECEIVE_COLLISION_DAMAGE)        \
+  X(DAMAGE_INCREMENTS_SCORE)         \
+  X(DIE_ON_APPLY_COLLISION)          \
+  X(HAS_PARTICLE_EMITTER)            \
+  X(CHILDREN_ON_SCREEN)              \
+  X(EMIT_SPAWN_PARTICLES)            \
+  X(EMIT_DEATH_PARTICLES)            \
+  X(APPLY_EFFECT_TINT)               \
+
+#define ENTITY_MOVE_CONTROLS          \
+  X(PLAYER)                           \
+  X(FOLLOW_LEADER)                    \
+  X(FOLLOW_LEADER_CHAIN)              \
+  X(COPY_LEADER)                      \
+  X(ORBIT_LEADER)                     \
+  X(LEADER_HORIZONTAL_STRAFE)         \
+  X(GOTO_WAYPOINT)                    \
+
+#define ENTITY_SHOOT_CONTROLS         \
+  X(ONCE)                             \
+  X(PERIODIC_1)                       \
+  X(PERIODIC_2)                       \
+  X(PERIODIC_3)                       \
+  X(PERIODIC_4)                       \
+  X(BOSS)                             \
+
+#define PARTICLE_EMITTERS        \
+  X(SPARKS)                      \
+  X(PURPLE_SPARKS)               \
+  X(BLOOD_SPIT)                  \
+  X(BLOOD_PUFF)                  \
+  X(MASSIVE_BLOOD_PUFF)          \
+  X(PINK_PUFF)                   \
+  X(GREEN_PUFF)                  \
+  X(BROWN_PUFF)                  \
+  X(WHITE_PUFF)                  \
+  X(BIG_PLANE_EXPLOSION)         \
+
+#define PARTICLE_FLAGS            \
+
+#define BULLET_EMITTER_KINDS         \
+  X(AVENGER)                         \
+  X(AVENGER_DOUBLE_TROUBLE)          \
+  X(AVENGER_TRIPLE_THREAT)           \
+  X(AVENGER_QUINTUS)                 \
+  X(CRAB_BASIC)                      \
+  X(CRAB_BATTLE_RIFLE)               \
+  X(CRAB_RADIAL_BOOM)                \
+  X(CRAB_BURST_BOOM)                 \
+  X(CRAB_V_SHOT)                     \
+  X(CRAB_CLOCK_SHOT)                 \
+  X(CRAB_COUNTER_CLOCK_SHOT)         \
+  X(CRAB_BOMBER_RUN_BOTTOM)          \
+  X(CRAB_BOMBER_RUN_TOP)             \
+  X(CRAB_TENTACLE_SHOT)              \
+  X(BOSS_BOOM)                       \
+  X(BOSS_WIDE_SWEEP)                 \
+  X(BOSS_V_SWEEP)                    \
+  X(BOSS_TENTACLE)                   \
+  X(BOSS_CIRCLES)                    \
+
+#define BULLET_EMITTER_FLAGS         \
+
+#define BULLET_EMITTER_RING_FLAGS   \
+  X(MANUALLY_SET_DIR)               \
+  X(LOOK_AT_PLAYER)                 \
+  X(USE_POINT_BAG)                  \
+  X(BURST)                          \
+  X(SPIN_WITH_SINE)                 \
+
+
+/*
+ * macros
+ */
+
+#define entity_kind_in_mask(kind, mask) (!!((mask) & (1ull<<(kind))))
+#define frame_arr_init(array) arr_init((array), gp->frame_scratch)
+
+
+/*
+ * typedefs
+ */
+
+typedef struct Game Game;
+typedef struct Entity Entity;
+typedef Entity* Entity_ptr;
+typedef struct Particle Particle;
+typedef struct Bullet_emitter Bullet_emitter;
+typedef u64 Game_flags;
+typedef u64 Game_debug_flags;
+typedef u64 Particle_emitter_kind_mask;
+typedef u64 Bullet_emitter_kind_mask;
+typedef u64 Bullet_emitter_flags;
+typedef struct Bullet_emitter_ring Bullet_emitter_ring;
+typedef u64 Bullet_emitter_ring_flags;
+typedef u64 Input_flags;
+typedef u64 Entity_flags;
+typedef u64 Entity_kind_mask;
+typedef u32 Particle_flags;
+typedef struct Entity_handle Entity_handle;
+typedef struct Entity_node Entity_node;
+typedef struct Entity_list Entity_list;
+typedef struct Waypoint Waypoint;
+typedef struct Waypoint_list Waypoint_list;
+typedef void (*Waypoint_action_proc)(Game *gp, Entity *this_entity);
+typedef void (*Entity_collide_proc)(Game *gp, Entity *this_entity, Entity *other_entity);
+
+typedef enum Game_state {
+#define X(state) GAME_STATE_##state,
+  GAME_STATES
+#undef X
+    GAME_STATE_MAX,
+} Game_state;
+
+char *Game_state_strings[GAME_STATE_MAX] = {
+#define X(state) #state,
+  GAME_STATES
+#undef X
+};
+
+typedef enum Game_flag_index {
+  GAME_FLAG_INDEX_INVALID = -1,
+#define X(flag) GAME_FLAG_INDEX_##flag,
+  GAME_FLAGS
+#undef X
+    GAME_FLAG_INDEX_MAX,
+} Game_flag_index;
+
+STATIC_ASSERT(GAME_FLAG_INDEX_MAX < 64, number_of_game_flags_is_less_than_64);
+
+#define X(flag) const Game_flags GAME_FLAG_##flag = (Game_flags)(1ull<<GAME_FLAG_INDEX_##flag);
+GAME_FLAGS
+#undef X
+
+typedef enum Game_debug_flag_index {
+  GAME_DEBUG_FLAG_INDEX_INVALID = -1,
+#define X(flag) GAME_DEBUG_FLAG_INDEX_##flag,
+  GAME_DEBUG_FLAGS
+#undef X
+    GAME_DEBUG_FLAG_INDEX_MAX,
+} Game_debug_flag_index;
+
+STATIC_ASSERT(GAME_DEBUG_FLAG_INDEX_MAX < 64, number_of_game_debug_flags_is_less_than_64);
+
+#define X(flag) const Game_debug_flags GAME_DEBUG_FLAG_##flag = (Game_debug_flags)(1ull<<GAME_DEBUG_FLAG_INDEX_##flag);
+GAME_DEBUG_FLAGS
+#undef X
+
+typedef enum Input_flag_index {
+  INPUT_FLAG_INDEX_INVALID = -1,
+#define X(flag) INPUT_FLAG_INDEX_##flag,
+  INPUT_FLAGS
+#undef X
+    INPUT_FLAG_INDEX_MAX,
+} Input_flag_index;
+
+STATIC_ASSERT(INPUT_FLAG_INDEX_MAX < 64, number_of_input_flags_is_less_than_64);
+
+#define X(flag) const Input_flags INPUT_FLAG_##flag = (Input_flags)(1ull<<INPUT_FLAG_INDEX_##flag);
+INPUT_FLAGS
+#undef X
+const Input_flags INPUT_FLAG_MOVE = INPUT_FLAG_MOVE_FORWARD | INPUT_FLAG_MOVE_LEFT | INPUT_FLAG_MOVE_RIGHT | INPUT_FLAG_MOVE_BACKWARD;
+
+typedef enum Entity_kind {
+  ENTITY_KIND_INVALID = 0,
+#define X(kind) ENTITY_KIND_##kind,
+  ENTITY_KINDS
+#undef X
+    ENTITY_KIND_MAX,
+} Entity_kind;
+
+#define X(kind) const Entity_kind_mask ENTITY_KIND_MASK_##kind = (Entity_kind_mask)(1ull<<ENTITY_KIND_##kind);
+ENTITY_KINDS
+#undef X
+
+char *Entity_kind_strings[ENTITY_KIND_MAX] = {
+  "",
+#define X(kind) #kind,
+  ENTITY_KINDS
+#undef X
+};
+
+STATIC_ASSERT(ENTITY_KIND_MAX < 64, number_of_entity_kinds_is_less_than_64);
+
+typedef enum Entity_order {
+  ENTITY_ORDER_INVALID = -1,
+#define X(order) ENTITY_ORDER_##order,
+  ENTITY_ORDERS
+#undef X
+    ENTITY_ORDER_MAX,
+} Entity_order;
+
+typedef enum Entity_move_control {
+  ENTITY_MOVE_CONTROL_NONE = 0,
+#define X(move_control) ENTITY_MOVE_CONTROL_##move_control,
+  ENTITY_MOVE_CONTROLS
+#undef X
+    ENTITY_MOVE_CONTROL_MAX
+} Entity_move_control;
+
+typedef enum Entity_shoot_control {
+  ENTITY_SHOOT_CONTROL_NONE = 0,
+#define X(shoot_control) ENTITY_SHOOT_CONTROL_##shoot_control,
+  ENTITY_SHOOT_CONTROLS
+#undef X
+    ENTITY_SHOOT_CONTROL_MAX
+} Entity_shoot_control;
+
+typedef enum Entity_flag_index {
+  ENTITY_FLAG_INDEX_INVALID = -1,
+#define X(flag) ENTITY_FLAG_INDEX_##flag,
+  ENTITY_FLAGS
+#undef X
+    ENTITY_FLAG_INDEX_MAX,
+} Entity_flag_index;
+
+#define X(flag) const Entity_flags ENTITY_FLAG_##flag = (Entity_flags)(1ull<<ENTITY_FLAG_INDEX_##flag);
+ENTITY_FLAGS
+#undef X
+
+STATIC_ASSERT(ENTITY_FLAG_INDEX_MAX < 64, number_of_entity_flags_is_less_than_64);
+
+typedef enum Particle_flag_index {
+  PARTICLE_FLAG_INDEX_INVALID = -1,
+#define X(flag) PARTICLE_FLAG_INDEX_##flag,
+  PARTICLE_FLAGS
+#undef X
+    PARTICLE_FLAG_INDEX_MAX,
+} Particle_flag_index;
+
+#define X(flag) const Particle_flags PARTICLE_FLAG_##flag = (Particle_flags)(1u<<PARTICLE_FLAG_INDEX_##flag);
+PARTICLE_FLAGS
+#undef X
+
+STATIC_ASSERT(PARTICLE_FLAG_INDEX_MAX < 32, number_of_particle_flags_is_less_than_32);
+
+typedef enum Particle_emitter {
+  PARTICLE_EMITTER_INVALID = 0,
+#define X(kind) PARTICLE_EMITTER_##kind,
+  PARTICLE_EMITTERS
+#undef X
+    PARTICLE_EMITTER_MAX,
+} Particle_emitter;
+
+typedef enum Bullet_emitter_kind {
+  BULLET_EMITTER_KIND_INVALID = 0,
+#define X(kind) BULLET_EMITTER_KIND_##kind,
+  BULLET_EMITTER_KINDS
+#undef X
+    BULLET_EMITTER_KIND_MAX,
+} Bullet_emitter_kind;
+
+#define X(kind) const Bullet_emitter_kind_mask BULLET_EMITTER_KIND_MASK_##kind = (Bullet_emitter_kind_mask)(1ull<<BULLET_EMITTER_KIND_##kind);
+BULLET_EMITTER_KINDS
+#undef X
+
+STATIC_ASSERT(BULLET_EMITTER_KIND_MAX < 64, number_of_bullet_emitter_kinds_is_less_than_64);
+
+typedef enum Bullet_emitter_flag_index {
+  BULLET_EMITTER_FLAG_INDEX_INVALID = -1,
+#define X(flag) BULLET_EMITTER_FLAG_INDEX_##flag,
+  BULLET_EMITTER_FLAGS
+#undef X
+    BULLET_EMITTER_FLAG_INDEX_MAX,
+} Bullet_emitter_flag_index;
+
+STATIC_ASSERT(BULLET_EMITTER_FLAG_INDEX_MAX < 64, number_of_bullet_emitter_flags_is_less_than_64);
+
+#define X(flag) const Bullet_emitter_flags BULLET_EMITTER_FLAG_##flag = (Bullet_emitter_flags)(1ull<<BULLET_EMITTER_FLAG_INDEX_##flag);
+BULLET_EMITTER_FLAGS
+#undef X
+
+typedef enum Bullet_emitter_ring_flag_index {
+  BULLET_EMITTER_RING_FLAG_INDEX_INVALID = -1,
+#define X(flag) BULLET_EMITTER_RING_FLAG_INDEX_##flag,
+  BULLET_EMITTER_RING_FLAGS
+#undef X
+    BULLET_EMITTER_RING_FLAG_INDEX_MAX,
+} Bullet_emitter_ring_flag_index;
+
+STATIC_ASSERT(BULLET_EMITTER_RING_FLAG_INDEX_MAX < 64, number_of_bullet_emitter_ring_flags_is_less_than_64);
+
+#define X(flag) const Bullet_emitter_ring_flags BULLET_EMITTER_RING_FLAG_##flag = (Bullet_emitter_ring_flags)(1ull<<BULLET_EMITTER_RING_FLAG_INDEX_##flag);
+BULLET_EMITTER_RING_FLAGS
+#undef X
+
+DECL_ARR_TYPE(Entity_ptr);
+DECL_SLICE_TYPE(Entity_ptr);
+DECL_ARR_TYPE(Rectangle);
+DECL_SLICE_TYPE(Rectangle);
+
+
+/*
+ * struct bodies
+ */
+
+struct Particle {
+  Particle_flags flags;
+
+  f32 live;
+  f32 lifetime;
+
+  Vector2 pos;
+  Vector2 vel;
+  f32     radius; /* this says radius, but the particles are squares */
+  f32     shrink;
+  f32     friction;
+  Color   begin_tint;
+  Color   end_tint;
+};
+
+struct Bullet_emitter_ring {
+  Bullet_emitter_ring_flags flags;
+  Vector2 dir;
+  f32 initial_angle;
+
+  f32 radius;
+  f32 spin_cur_angle;
+  f32 spin_start_angle;
+  f32 spin_vel;
+  struct {
+    f32 t;
+    f32 amp;
+    f32 freq;
+    f32 phase;
+  } spin_sine;
+
+  s32 n_arms;
+  f32 arms_occupy_circle_sector_percent;
+
+  Vector2 bullet_point_bag[MAX_BULLETS_IN_BAG];
+
+  s32          n_bullets;
+  f32          bullet_arm_width;
+  f32          bullet_radius;
+  f32          bullet_vel;
+  f32          bullet_friction;
+  f32          bullet_curve;
+  f32          bullet_curve_rolloff_vel;
+  s32          bullet_damage;
+  f32          bullet_lifetime;
+  Color        bullet_bounds_color;
+  Color        bullet_fill_color;
+  Entity_flags bullet_flags;
+
+  Particle_emitter bullet_spawn_particle_emitter;
+  Particle_emitter bullet_death_particle_emitter;
+
+  Sprite bullet_sprite;
+  f32    bullet_sprite_scale;
+  f32    bullet_sprite_rotation;
+  Color  bullet_sprite_tint;
+
+  Sound sound;
+
+  f32 burst_cooldown;
+  f32 burst_timer;
+  s32 burst_shots;
+  s32 burst_shots_fired;
+};
+
+struct Bullet_emitter {
+  Bullet_emitter_flags flags;
+  Entity_kind_mask bullet_collision_mask;
+  Entity_kind bullet_kind;
+  Bullet_emitter_kind  kind;
+
+  Bullet_emitter_ring rings[MAX_BULLET_EMITTER_RINGS];
+
+  s32 shots[MAX_BULLET_EMITTER_RINGS];
+  f32 cooldown_period[MAX_BULLET_EMITTER_RINGS];
+  f32 cooldown_timer[MAX_BULLET_EMITTER_RINGS];
+
+  u32 active_rings_mask;
+  b16 cocked;
+  s16 shoot;
+};
+
+struct Waypoint_list {
+  Waypoint *first;
+  Waypoint *last;
+  s64 count;
+  Waypoint_action_proc action;
+};
+
+struct Waypoint {
+  Waypoint *next;
+  Waypoint *prev;
+  Vector2   pos;
+  f32       radius;
+  u32       tag;
+};
+
+struct Entity_list {
+  Entity_node *first;
+  Entity_node *last;
+  s64 count;
+};
+
+struct Entity_handle {
+  u64     uid;
+  Entity *ep;
+};
+
+struct Entity_node {
+  Entity_node *next;
+  Entity_node *prev;
+  union {
+    Entity_handle handle;
+    struct {
+      u64     uid;
+      Entity *ep;
+    };
+  };
+};
+
+struct Entity {
+  b32 live;
+
+  Entity_kind    kind;
+  Entity_order   update_order;
+  Entity_order   draw_order;
+
+  Entity_move_control move_control;
+  Entity_shoot_control shoot_control;
+
+  Entity_flags   flags;
+
+  Entity *free_list_next;
+
+  u64 uid;
+  u64 tag;
+
+  Entity_handle leader_handle;
+
+  Entity_list *child_list;
+  Entity_list *parent_list;
+  Entity_node *list_node;
+
+  Vector2 look_dir;
+  Vector2 accel;
+  Vector2 vel;
+  Vector2 pos;
+  f32     radius;
+  f32     curve;
+  f32     curve_rolloff_vel;
+  f32     scalar_vel;
+  f32     friction;
+
+  f32     orbit_cur_angle;
+  f32     orbit_speed;
+  f32     orbit_radius;
+
+  f32 leader_strafe_padding;
+
+  f32 shooting_pause_timer;
+  f32 start_shooting_delay;
+
+  f32 start_shooting_delay_period;
+  s32 number_of_shots;
+
+  b32 received_collision;
+  s32 received_damage;
+
+  s32 damage_amount;
+
+  s32 health;
+
+  Color bounds_color;
+  Color fill_color;
+
+  Waypoint_list waypoints;
+  Waypoint     *cur_waypoint;
+
+  Particle_emitter particle_emitter;
+  Particle_emitter spawn_particle_emitter;
+  Particle_emitter death_particle_emitter;
+
+  Bullet_emitter bullet_emitter;
+
+  Entity_kind_mask apply_collision_mask;
+  Entity_collide_proc collide_proc;
+
+  Sprite sprite;
+  f32    sprite_scale;
+  f32    sprite_rotation;
+  Color  sprite_tint;
+
+  Color  effect_tint;
+  f32    effect_tint_timer_vel;
+  f32    effect_tint_period;
+  f32    effect_tint_timer;
+
+  f32 invulnerability_timer;
+
+  f32 life_time_period;
+  f32 life_timer;
+
+  Sound spawn_sound;
+  Sound hurt_sound;
+  Sound die_sound;
+
+};
+
+struct Game {
+
+  f32 dt;
+  b32 quit;
+
+  Game_state state;
+  Game_state next_state;
+
+  Game_flags       flags;
+  Game_debug_flags debug_flags;
+
+  Input_flags input_flags;
+
+  u64 frame_index;
+
+  Arena *scratch;
+  Arena *frame_scratch;
+  Arena *wave_scratch;
+
+  Font font;
+
+  RenderTexture2D render_texture;
+
+  Texture2D particle_atlas;
+  Texture2D sprite_atlas;
+  Texture2D background_texture;
+
+  f32 background_y_offset;
+
+  u64 entity_uid;
+  Entity *entities;
+  u64 entities_allocated;
+  Entity *entity_free_list;
+
+  Particle *particles;
+  u64 particles_pos;
+
+  u32 live_entities;
+  u32 live_particles;
+  u32 live_enemies;
+
+  Entity *player;
+  Entity_handle player_handle;
+
+  s16 wave;
+
+  s16 phase_index;
+
+  struct {
+    u32 flags;
+    b16 check_if_finished;
+    b16 set_timer;
+    s32 accumulator[4];
+    f32 timer[4];
+    union {
+      Waypoint_list *waypoints;
+    };
+  } phase;
+
+  s32 score;
+  s32 player_health;
+  s32 bomb_count;
+  f32 bomb_cooldown;
+
+  f32  wave_timer;
+  f32  wave_type_char_timer;
+  s32  wave_chars_typed;
+  s32  wave_banner_type_dir;
+  s32  wave_banner_target_msg_len;
+  Str8 wave_banner_msg;
+
+  f32 gameover_pre_delay;
+  f32 gameover_type_char_timer;
+  s32 gameover_chars_typed;
+
+  Arena_scope intro_scope;
+
+  Sound avenger_bullet_sound;
+  Sound crab_hurt_sound;
+  Sound health_pickup_sound;
+  Sound avenger_hurt_sound;
+  Sound bomb_sound;
+  Sound powerup_sound;
+  Sound boss_die;
+
+  Music music;
+
+};
+
+
+/*
+ * function headers
+ */
+
+float get_random_float(float min, float max, int steps);
+
+Game* game_init(void);
+void game_load_assets(Game *gp);
+void game_unload_assets(Game *gp);
+void game_update_and_draw(Game *gp);
+void game_close(Game *gp);
+void game_reset(Game *gp);
+void game_main_loop(Game *gp);
+void game_wave_end(Game *gp);
+
+Entity* entity_spawn(Game *gp);
+void    entity_die(Game *gp, Entity *ep);
+
+Entity_list* push_entity_list(Game *gp);
+Entity_node* push_entity_list_node(Game *gp);
+Entity_list* get_entity_list_by_id(Game *gp, int list_id);
+Entity_node* entity_list_append(Game *gp, Entity_list *list, Entity *ep);
+Entity_node* entity_list_push_front(Game *gp, Entity_list *list, Entity *ep);
+b32          entity_list_remove(Game *gp, Entity_list *list, Entity *ep);
+
+Waypoint* waypoint_list_append(Game *gp, Waypoint_list *list, Vector2 pos, float radius);
+Waypoint* waypoint_list_append_tagged(Game *gp, Waypoint_list *list, Vector2 pos, float radius, u64 tag);
+
+Entity* entity_from_uid(Game *gp, u64 uid);
+Entity* entity_from_handle(Entity_handle handle);
+
+Entity_handle handle_from_entity(Entity *ep);
+
+Entity* spawn_player(Game *gp);
+Entity* spawn_crab(Game *gp);
+Entity* spawn_boss_crab(Game *gp);
+Entity* spawn_health_pack(Game *gp);
+Entity* spawn_bomb_pack(Game *gp);
+Entity* spawn_double_bullets_pack(Game *gp);
+Entity* spawn_triple_bullets_pack(Game *gp);
+Entity* spawn_leader(Game *gp);
+
+void collide_with_health_pack(Game *gp, Entity *a, Entity *b);
+void collide_with_bomb_pack(Game *gp, Entity *a, Entity *b);
+void collide_with_double_bullets_pack(Game *gp, Entity *a, Entity *b);
+void collide_with_triple_bullets_pack(Game *gp, Entity *a, Entity *b);
+void collide_with_quinta_bullets_pack(Game *gp, Entity *a, Entity *b);
+
+b32 check_circle_all_inside_rec(Vector2 center, float radius, Rectangle rec);
+
+void entity_emit_particles(Game *gp, Entity *ep);
+
+void entity_emit_bullets(Game *gp, Entity *ep);
+
+b32  entity_check_collision(Game *gp, Entity *a, Entity *b);
+
+void draw_sprite(Game *gp, Entity *ep);
+void sprite_update(Game *gp, Entity *ep);
+Sprite_frame sprite_current_frame(Sprite sp);
+b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
+
+
+/*
+ * entity settings
+ */
+
+const s32 MAX_BOMBS = 3;
+
+const Vector2 PLAYER_INITIAL_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 1.8f };
+const Vector2 PLAYER_INITIAL_DEBUG_POS = { WINDOW_WIDTH * 0.5f , WINDOW_HEIGHT * 0.8f };
+const float PLAYER_FRICTION = 40.0f;
+const Vector2 PLAYER_LOOK_DIR = { 0, -1 };
+const s32 PLAYER_HEALTH = 10;
+const float PLAYER_BOUNDS_RADIUS = 25;
+const float PLAYER_SPRITE_Y_OFFSET = 14;
+const float PLAYER_SPRITE_SCALE = 2.0f;
+const float PLAYER_ACCEL = 1.6e4;
+const float PLAYER_SLOW_FACTOR = 0.5f;
+const Color PLAYER_BOUNDS_COLOR = { 255, 0, 0, 255 };
+const Entity_kind_mask AVENGER_BULLET_APPLY_COLLISION_MASK =
+ENTITY_KIND_MASK_CRAB     |
+ENTITY_KIND_MASK_BOSS |
+0;
+
+const float PICKUP_BOUNDS_RADIUS = 50.0f;
+
+const Entity_flags DEFAULT_BULLET_FLAGS =
+ENTITY_FLAG_APPLY_COLLISION |
+ENTITY_FLAG_APPLY_COLLISION_DAMAGE |
+ENTITY_FLAG_DIE_IF_OFFSCREEN |
+ENTITY_FLAG_DIE_ON_APPLY_COLLISION |
+ENTITY_FLAG_DYNAMICS |
+0;
+
+const float AVENGER_NORMAL_BULLET_VELOCITY = 1800;
+const float AVENGER_NORMAL_BULLET_BOUNDS_RADIUS = 10;
+const float AVENGER_NORMAL_FIRE_COOLDOWN = 0.04f;
+const s32 AVENGER_NORMAL_BULLET_DAMAGE = 5;
+
+const Vector2 CRAB_LOOK_DIR = { 0, 1 };
+
+const s32 CRAB_HEALTH = 10;
+const s32 BIG_CRAB_HEALTH = 25;
+const s32 LARGE_CRAB_HEALTH = 35;
+const s32 HUGE_CRAB_HEALTH = 30;
+
+const float CRAB_BULLET_SPRITE_SCALE = 3.0f;
+const Color CRAB_BULLET_SPRITE_TINT = { 239, 35, 236, 255 };
+const float CRAB_FOLLOW_LEADER_SPEED = 300;
+const float CRAB_BOUNDS_RADIUS = 40;
+const float CRAB_SPRITE_SCALE = 3.0f;
+const float CRAB_NORMAL_STRAFE_SPEED = 400;
+
+const float CRAB_ACCEL = 5.5e3;
+
+const Color CRAB_BOUNDS_COLOR = { 0, 228, 48, 255 };
+const Entity_kind_mask CRAB_APPLY_COLLISION_MASK =
+ENTITY_KIND_MASK_PLAYER |
+0;
+const float CRAB_FIRE_COOLDOWN = 0.03f;
+const float CRAB_BURST_PAUSE = 1.0f;
+const float CRAB_NORMAL_BULLET_BOUNDS_RADIUS = 10;
+const float CRAB_NORMAL_BULLET_VELOCITY = 400;
+const float CRAB_NORMAL_BULLET_DAMAGE = 1;
+
+const Vector2 ORBIT_ARM = { 0, -1 };
+
+const Entity_kind_mask ENEMY_KIND_MASK =
+ENTITY_KIND_MASK_CRAB |
+ENTITY_KIND_MASK_BOSS |
+ENTITY_KIND_MASK_LEADER |
+0;
+
+const float TYPING_SPEED   = 0.055f;
+const float COUNTING_SPEED   = 0.0001f;
+
+const float WAVE_DELAY_TIME = 1.9f;
+const float WAVE_BANNER_FONT_SIZE    = 80.0f;
+const float WAVE_BANNER_FONT_SPACING = 8.0f;
+const Color WAVE_BANNER_FONT_COLOR   = BLACK;
+
+const float GAME_OVER_FONT_SIZE    = 100.0f;
+const float GAME_OVER_FONT_SPACING = 10.0f;
+const Color GAME_OVER_FONT_COLOR   = RED;
+
+const Color MY_GOLD = { 13, 88, 20, 255 };
+const Color MILITARY_GREEN = { 50, 60, 57 , 255 };
+const Color MUSTARD = { 234, 200, 0, 255 };
+
+const float BOMB_COOLDOWN_TIME = 15.0f;
+
 
 
 /*
@@ -10,10 +864,11 @@
 //#include "sound_data.c"
 
 
-
 /*
  * globals
  */
+
+bool cleared_screen_on_victory = false;
 
 bool has_started_before = false;
 bool at_boss_level = false;
@@ -397,6 +1252,7 @@ Entity* spawn_boss_crab(Game *gp) {
 
 #ifdef DEBUG
   ep->health = 1;
+  //ep->health = 10000;
 #else
   ep->health = 10000;
 #endif
@@ -753,6 +1609,21 @@ void collide_with_quinta_bullets_pack(Game *gp, Entity *a, Entity *b) {
   SetSoundVolume(gp->powerup_sound, 0.3);
   PlaySound(gp->powerup_sound);
 
+}
+
+b32 check_circle_all_inside_rec(Vector2 center, float radius, Rectangle rec) {
+  b32 inside = 0;
+
+  float xmin = rec.x + radius;
+  float ymin = rec.y + radius;
+  float xmax = rec.x + rec.width - radius;
+  float ymax = rec.y + rec.height - radius;
+
+  if(center.x > xmin && center.x < xmax && center.y > ymin && center.y < ymax) {
+    inside = 1;
+  }
+
+  return inside;
 }
 
 force_inline float get_random_float(float min, float max, int steps) {
@@ -1894,7 +2765,7 @@ int boss_min_and_max_shots[][2] = {
             ring->burst_shots_fired = 0;
 
           } else {
-            emitter->cooldown_timer[ring_i] -= gp->timestep;
+            emitter->cooldown_timer[ring_i] -= gp->dt;
           }
 
           continue;
@@ -1906,7 +2777,7 @@ int boss_min_and_max_shots[][2] = {
             ring->burst_timer = ring->burst_cooldown;
             ring->burst_shots_fired++;
           } else {
-            ring->burst_timer -= gp->timestep;
+            ring->burst_timer -= gp->dt;
             continue;
           }
 
@@ -1918,7 +2789,7 @@ int boss_min_and_max_shots[][2] = {
           emitter->cooldown_timer[ring_i] = emitter->cooldown_period[ring_i];
           emitter->shots[ring_i]--;
         } else {
-          emitter->cooldown_timer[ring_i] -= gp->timestep;
+          emitter->cooldown_timer[ring_i] -= gp->dt;
           continue;
         }
 
@@ -2068,14 +2939,14 @@ int boss_min_and_max_shots[][2] = {
         ring->spin_cur_angle =
           ring->spin_sine.amp * sinf(ring->spin_sine.freq * ring->spin_sine.t + ring->spin_sine.phase);
 
-        ring->spin_sine.t += gp->timestep;
+        ring->spin_sine.t += gp->dt;
         // TODO sine period
         //if(ring->spin_sine.t >= (1/ring->spin_sine.freq)) {
         //  ring->spin_sine.t = 0;
         //}
 
       } else {
-        ring->spin_cur_angle += ring->spin_vel * gp->timestep;
+        ring->spin_cur_angle += ring->spin_vel * gp->dt;
         if(ring->spin_cur_angle >= 2*PI) {
           ring->spin_cur_angle = 0;
         }
@@ -2210,7 +3081,20 @@ void draw_sprite(Game *gp, Entity *ep) {
   DrawTexturePro(gp->sprite_atlas, source_rec, dest_rec, (Vector2){0}, rotation, tint);
 }
 
-void game_init(Game *gp) {
+Game* game_init(void) {
+
+  SetConfigFlags(FLAG_WINDOW_RESIZABLE);
+  InitWindow(1000, 800, "Flight 22");
+  InitAudioDevice();
+
+  //SetMasterVolume(GetMasterVolume() * 0.5);
+
+  SetTargetFPS(TARGET_FPS);
+  SetTextLineSpacing(10);
+  SetTraceLogLevel(LOG_DEBUG);
+  SetExitKey(0);
+
+  Game *gp = os_alloc(sizeof(Game));
   memory_set(gp, 0, sizeof(Game));
 
   gp->entities = os_alloc(sizeof(Entity) * MAX_ENTITIES);
@@ -2225,6 +3109,8 @@ void game_init(Game *gp) {
   PlayMusicStream(gp->music);
 
   game_reset(gp);
+
+  return gp;
 }
 
 void game_load_assets(Game *gp) {
@@ -2265,16 +3151,19 @@ void game_unload_assets(Game *gp) {
 
 }
 
+void game_close(Game *gp) {
+  game_unload_assets(gp);
+
+  CloseWindow();
+  CloseAudioDevice();
+}
+
 void game_reset(Game *gp) {
 
   gp->state = GAME_STATE_NONE;
   gp->next_state = GAME_STATE_NONE;
 
   gp->flags = 0;
-
-#ifdef DEBUG
-  gp->debug_flags = GAME_DEBUG_FLAG_HOT_RELOAD;
-#endif
 
   gp->player = 0;
   gp->player_handle = (Entity_handle){0};
@@ -2579,7 +3468,7 @@ void game_main_loop(Game *gp) {
                   }
 
                 } else {
-                  *first_enemy_group_spawn_delay += gp->timestep;
+                  *first_enemy_group_spawn_delay += gp->dt;
                 }
 
               } else if(!(gp->phase.flags & SPAWNED_SECOND_GROUP)) {
@@ -2625,7 +3514,7 @@ void game_main_loop(Game *gp) {
                   }
 
                 } else {
-                  *second_enemy_group_spawn_delay += gp->timestep;
+                  *second_enemy_group_spawn_delay += gp->dt;
                 }
               } else if(!(gp->phase.flags & SPAWNED_THIRD_GROUP)) {
                 if(*third_enemy_group_spawn_delay >= THIRD_GROUP_DELAY) {
@@ -2670,7 +3559,7 @@ void game_main_loop(Game *gp) {
                   }
 
                 } else {
-                  *third_enemy_group_spawn_delay += gp->timestep;
+                  *third_enemy_group_spawn_delay += gp->dt;
                 }
               } else {
                 gp->phase.check_if_finished = 1;
@@ -2731,7 +3620,7 @@ void game_main_loop(Game *gp) {
                 }
 
               } else {
-                *spawn_clock_crab_timer += gp->timestep;
+                *spawn_clock_crab_timer += gp->dt;
               }
 
             }
@@ -2813,7 +3702,7 @@ void game_main_loop(Game *gp) {
 
                 }
               } else {
-                *spawn_clock_crab_timer += gp->timestep;
+                *spawn_clock_crab_timer += gp->dt;
               }
 
             }
@@ -2836,7 +3725,7 @@ void game_main_loop(Game *gp) {
             }
 
             if(*spawn_clock_crab_timer < SPAWN_CLOCK_CRAB_DELAY) {
-              *spawn_clock_crab_timer += gp->timestep;
+              *spawn_clock_crab_timer += gp->dt;
             } else {
               if(*n_crabs >= N_CRABS) {
                 if(gp->live_enemies == 0) {
@@ -2954,7 +3843,7 @@ void game_main_loop(Game *gp) {
                   gp->phase.timer[0] = 0;
                   goto phase_end;
                 } else {
-                  gp->phase.timer[0] -= gp->timestep;
+                  gp->phase.timer[0] -= gp->dt;
                 }
               }
 
@@ -3037,7 +3926,7 @@ void game_main_loop(Game *gp) {
                     crab->sprite_tint = MAROON;
 
                   } else {
-                    *enemy_snake_spawn_timer += gp->timestep;
+                    *enemy_snake_spawn_timer += gp->dt;
                   }
 
                   if(!(gp->phase.flags & SPAWNED_SECOND_GROUP)) {
@@ -3098,7 +3987,7 @@ void game_main_loop(Game *gp) {
                       } /* spawn_orbiting_crabs */
 
                     } else {
-                      *second_enemy_group_spawn_delay += gp->timestep;
+                      *second_enemy_group_spawn_delay += gp->dt;
                     }
 
                   }
@@ -3161,7 +4050,7 @@ void game_main_loop(Game *gp) {
                       } /* spawn_orbiting_crabs */
 
                     } else {
-                      *third_enemy_group_spawn_delay += gp->timestep;
+                      *third_enemy_group_spawn_delay += gp->dt;
                     }
 
                   }
@@ -3184,7 +4073,7 @@ void game_main_loop(Game *gp) {
             f32 *pickup_timer = &gp->phase.timer[1];
 
             if(*enemy_spawn_delay < ENEMY_SPAWN_DELAY) {
-              *enemy_spawn_delay += gp->timestep;
+              *enemy_spawn_delay += gp->dt;
             } else {
 
               if(!(*flags & SPAWNED_ENEMY)) {
@@ -3215,7 +4104,7 @@ void game_main_loop(Game *gp) {
                     spawn_bomb_pack(gp);
                   }
                 } else {
-                  *pickup_timer += gp->timestep;
+                  *pickup_timer += gp->dt;
                 }
 
                 if(gp->live_enemies == 0) {
@@ -3295,12 +4184,17 @@ void game_update_and_draw(Game *gp) {
   }
 
 #ifdef DEBUG
-  gp->timestep = Clamp(1.0f/50.0f, 1.0f/TARGET_FPS, GetFrameTime());
+  gp->dt = Clamp(1.0f/50.0f, 1.0f/TARGET_FPS, GetFrameTime());
 #else
-  gp->timestep = Clamp(1.0f/10.0f, 1.0f/TARGET_FPS, GetFrameTime());
+  gp->dt = Clamp(1.0f/10.0f, 1.0f/TARGET_FPS, GetFrameTime());
 #endif
 
   gp->next_state = gp->state;
+
+  if(WindowShouldClose()) {
+    gp->quit = 1;
+    return;
+  }
 
   { /* get input */
     gp->input_flags = 0;
@@ -3354,10 +4248,6 @@ void game_update_and_draw(Game *gp) {
       game_reset(gp);
     }
 
-    if(IsKeyPressed(KEY_F3)) {
-      gp->debug_flags ^= GAME_DEBUG_FLAG_HOT_RELOAD;
-    }
-
     if(IsKeyPressed(KEY_F11)) {
       gp->debug_flags  ^= GAME_DEBUG_FLAG_DEBUG_UI;
     }
@@ -3403,11 +4293,11 @@ void game_update_and_draw(Game *gp) {
     if(gp->background_y_offset >= WINDOW_HEIGHT) {
       gp->background_y_offset -= WINDOW_HEIGHT;
     } else {
-      gp->background_y_offset += gp->timestep * 100;
+      gp->background_y_offset += gp->dt * 100;
     }
 
     if(gp->bomb_cooldown > 0.0f) {
-      gp->bomb_cooldown -= gp->timestep;
+      gp->bomb_cooldown -= gp->dt;
     }
 
     switch(gp->state) {
@@ -3422,13 +4312,14 @@ void game_update_and_draw(Game *gp) {
           {
 #ifdef DEBUG
 
-            gp->wave = 0;
-            gp->phase_index = 0;
+            gp->wave = 2;
+            gp->phase_index = 2;
 
             gp->debug_flags |=
               GAME_DEBUG_FLAG_DEBUG_UI |
+              GAME_DEBUG_FLAG_MUTE |
+              GAME_DEBUG_FLAG_SKIP_TRANSITIONS |
               //GAME_DEBUG_FLAG_PLAYER_INVINCIBLE |
-              //GAME_DEBUG_FLAG_SKIP_TRANSITIONS |
               0;
 
             //gp->next_state = GAME_STATE_GAME_OVER;
@@ -3450,6 +4341,8 @@ void game_update_and_draw(Game *gp) {
 #endif
 
             { /* init globals */
+
+              cleared_screen_on_victory = false;
 
               at_boss_level = false;
 
@@ -3511,7 +4404,7 @@ void game_update_and_draw(Game *gp) {
                 title_screen_type_char_timer = 0;
                 title_screen_chars_deleted += 1;
               } else {
-                title_screen_type_char_timer += gp->timestep;
+                title_screen_type_char_timer += gp->dt;
               }
 
             }
@@ -3568,7 +4461,7 @@ void game_update_and_draw(Game *gp) {
                   gp->wave_banner_type_dir = -1;
                 }
               } else {
-                gp->wave_timer -= gp->timestep;
+                gp->wave_timer -= gp->dt;
               }
 
             } else {
@@ -3577,7 +4470,7 @@ void game_update_and_draw(Game *gp) {
                 gp->wave_type_char_timer = TYPING_SPEED;
                 gp->wave_chars_typed += gp->wave_banner_type_dir;
               } else {
-                gp->wave_type_char_timer -= gp->timestep;
+                gp->wave_type_char_timer -= gp->dt;
               }
 
             }
@@ -3592,6 +4485,23 @@ void game_update_and_draw(Game *gp) {
         break;
       case GAME_STATE_VICTORY:
         {
+
+          if(!cleared_screen_on_victory) {
+            cleared_screen_on_victory = true;
+
+            for(int i = 0; i < gp->entities_allocated; i++) {
+              Entity *check = &gp->entities[i];
+
+              if(check->live) {
+                if(CheckCollisionCircleRec(check->pos, check->radius, WINDOW_RECT)) {
+                  if(entity_kind_in_mask(check->kind, ENTITY_KIND_MASK_CRAB | ENTITY_KIND_MASK_ENEMY_BULLET)) {
+                    check->flags |= ENTITY_FLAG_DIE_NOW;
+                  }
+                }
+              }
+            }
+
+          }
 
           if(victory_screen_finished_incrementing_score) {
             if(IsKeyPressed(KEY_ENTER)) {
@@ -3618,12 +4528,12 @@ void game_update_and_draw(Game *gp) {
                 gp->gameover_type_char_timer = TYPING_SPEED;
                 gp->gameover_chars_typed += 1;
               } else {
-                gp->gameover_type_char_timer -= gp->timestep;
+                gp->gameover_type_char_timer -= gp->dt;
               }
 
             }
           } else {
-            gp->gameover_pre_delay += gp->timestep;
+            gp->gameover_pre_delay += gp->dt;
           }
 
         } break;
@@ -3655,6 +4565,7 @@ void game_update_and_draw(Game *gp) {
 
           b8 applied_collision = 0;
           b8 is_on_screen = CheckCollisionCircleRec(ep->pos, ep->radius, WINDOW_RECT);
+          b8 is_fully_on_screen = check_circle_all_inside_rec(ep->pos, ep->radius, WINDOW_RECT);
 
           switch(ep->move_control) {
             default:
@@ -3740,7 +4651,7 @@ void game_update_and_draw(Game *gp) {
 
                 if(ep->invulnerability_timer != 0) {
                   if(ep->invulnerability_timer > 0) {
-                    ep->invulnerability_timer -= gp->timestep;
+                    ep->invulnerability_timer -= gp->dt;
 
                     if(ep->effect_tint_timer <= 0) {
                       ep->flags |= ENTITY_FLAG_APPLY_EFFECT_TINT;
@@ -3823,7 +4734,7 @@ void game_update_and_draw(Game *gp) {
                 if(ep->orbit_cur_angle >= 2*PI) {
                   ep->orbit_cur_angle = 0;
                 } else {
-                  ep->orbit_cur_angle += ep->orbit_speed * gp->timestep;
+                  ep->orbit_cur_angle += ep->orbit_speed * gp->dt;
                 }
 
                 ep->vel = leader->vel;
@@ -3922,7 +4833,7 @@ void game_update_and_draw(Game *gp) {
                 if(dist >= 0.0001f) {
                   Vector2 dir = Vector2Scale(delta, 1.0f/dist);
                   Vector2 ideal_pos = Vector2Subtract(leader->pos, Vector2Scale(dir, ideal_dist));
-                  float snap_speed = 4.0f * gp->timestep;
+                  float snap_speed = 4.0f * gp->dt;
                   ep->pos = Vector2Lerp(ep->pos, ideal_pos, snap_speed);
                 }
 
@@ -3938,7 +4849,7 @@ void game_update_and_draw(Game *gp) {
               case ENTITY_SHOOT_CONTROL_BOSS:
                 {
                   if(boss_start_shooting_delay < 1.8f) {
-                    boss_start_shooting_delay += gp->timestep;
+                    boss_start_shooting_delay += gp->dt;
                   } else {
 
                     if(boss_shoot_pause >= get_random_float(1.0f, 2.0f, 4)) {
@@ -3949,7 +4860,7 @@ void game_update_and_draw(Game *gp) {
                         ep->bullet_emitter.shoot = 1;
                       }
                     } else {
-                      boss_shoot_pause += gp->timestep;
+                      boss_shoot_pause += gp->dt;
                     }
 
                   }
@@ -3959,7 +4870,7 @@ void game_update_and_draw(Game *gp) {
                   ASSERT(ep->start_shooting_delay_period > 0);
 
                   if(ep->start_shooting_delay < ep->start_shooting_delay_period) {
-                    ep->start_shooting_delay += gp->timestep;
+                    ep->start_shooting_delay += gp->dt;
                   } else {
                     ep->bullet_emitter.shoot = 1;
                     ep->shoot_control = ENTITY_SHOOT_CONTROL_NONE;
@@ -3970,7 +4881,7 @@ void game_update_and_draw(Game *gp) {
                 {
 
                   if(ep->start_shooting_delay < 0.6f) {
-                    ep->start_shooting_delay += gp->timestep;
+                    ep->start_shooting_delay += gp->dt;
                   } else {
 
                     if(ep->bullet_emitter.shoot <= 0) {
@@ -3978,7 +4889,7 @@ void game_update_and_draw(Game *gp) {
                         ep->shooting_pause_timer = 1.0f;
                         ep->bullet_emitter.shoot = 1;
                       } else {
-                        ep->shooting_pause_timer -= gp->timestep;
+                        ep->shooting_pause_timer -= gp->dt;
                       }
                     }
 
@@ -3990,7 +4901,7 @@ void game_update_and_draw(Game *gp) {
                 {
 
                   if(ep->start_shooting_delay < 0.3f) {
-                    ep->start_shooting_delay += gp->timestep;
+                    ep->start_shooting_delay += gp->dt;
                   } else {
 
                     if(ep->bullet_emitter.shoot <= 0) {
@@ -3998,7 +4909,7 @@ void game_update_and_draw(Game *gp) {
                         ep->shooting_pause_timer = 2.5f;
                         ep->bullet_emitter.shoot = 1;
                       } else {
-                        ep->shooting_pause_timer -= gp->timestep;
+                        ep->shooting_pause_timer -= gp->dt;
                       }
                     }
 
@@ -4010,7 +4921,7 @@ void game_update_and_draw(Game *gp) {
                 {
 
                   if(ep->start_shooting_delay < 2.0f) {
-                    ep->start_shooting_delay += gp->timestep;
+                    ep->start_shooting_delay += gp->dt;
                   } else {
 
                     if(ep->bullet_emitter.shoot <= 0) {
@@ -4018,7 +4929,7 @@ void game_update_and_draw(Game *gp) {
                         ep->shooting_pause_timer = 2.0f;
                         ep->bullet_emitter.shoot = 1;
                       } else {
-                        ep->shooting_pause_timer -= gp->timestep;
+                        ep->shooting_pause_timer -= gp->dt;
                       }
                     }
 
@@ -4030,7 +4941,7 @@ void game_update_and_draw(Game *gp) {
                 {
 
                   if(ep->start_shooting_delay < 1.5f) {
-                    ep->start_shooting_delay += gp->timestep;
+                    ep->start_shooting_delay += gp->dt;
                   } else {
 
                     if(ep->bullet_emitter.shoot <= 0) {
@@ -4038,7 +4949,7 @@ void game_update_and_draw(Game *gp) {
                         ep->shooting_pause_timer = 2.5f;
                         ep->bullet_emitter.shoot = 1;
                       } else {
-                        ep->shooting_pause_timer -= gp->timestep;
+                        ep->shooting_pause_timer -= gp->dt;
                       }
                     }
 
@@ -4052,13 +4963,13 @@ void game_update_and_draw(Game *gp) {
           /* flags stuff */
 
           if(ep->flags & ENTITY_FLAG_APPLY_FRICTION) {
-            ep->vel = Vector2Subtract(ep->vel, Vector2Scale(ep->vel, ep->friction*gp->timestep));
+            ep->vel = Vector2Subtract(ep->vel, Vector2Scale(ep->vel, ep->friction*gp->dt));
           }
 
           if(ep->flags & ENTITY_FLAG_DYNAMICS) {
-            Vector2 a_times_t = Vector2Scale(ep->accel, gp->timestep);
+            Vector2 a_times_t = Vector2Scale(ep->accel, gp->dt);
             ep->vel = Vector2Add(ep->vel, a_times_t);
-            ep->pos = Vector2Add(ep->pos, Vector2Add(Vector2Scale(ep->vel, gp->timestep), Vector2Scale(a_times_t, 0.5*gp->timestep)));
+            ep->pos = Vector2Add(ep->pos, Vector2Add(Vector2Scale(ep->vel, gp->dt), Vector2Scale(a_times_t, 0.5*gp->dt)));
 
             if(ep->flags & ENTITY_FLAG_DYNAMICS_HAS_CURVE) {
               ep->vel = Vector2Rotate(ep->vel, ep->curve);
@@ -4127,12 +5038,15 @@ void game_update_and_draw(Game *gp) {
               ep->effect_tint_timer = 0;
               ep->flags &= ~ENTITY_FLAG_APPLY_EFFECT_TINT;
             } else {
-              ep->effect_tint_timer -= ep->effect_tint_timer_vel*gp->timestep;
+              ep->effect_tint_timer -= ep->effect_tint_timer_vel*gp->dt;
             }
           }
 
           if(ep->flags & ENTITY_FLAG_RECEIVE_COLLISION) {
-            if(is_on_screen) {
+            if(!is_fully_on_screen) {
+              ep->received_collision = 0;
+              ep->received_damage = 0;
+            } else {
               if(ep->received_collision) {
                 ep->received_collision = 0;
 
@@ -4215,7 +5129,7 @@ void game_update_and_draw(Game *gp) {
               ep->life_timer = 0;
               ep->flags |= ENTITY_FLAG_DIE_NOW;
             } else {
-              ep->life_timer += gp->timestep;
+              ep->life_timer += gp->dt;
             }
 
           }
@@ -4294,14 +5208,14 @@ entity_update_end:;
           continue;
         }
 
-        p->pos = Vector2Add(p->pos, Vector2Scale(p->vel, gp->timestep));
-        p->vel = Vector2Subtract(p->vel, Vector2Scale(p->vel, p->friction*gp->timestep));
+        p->pos = Vector2Add(p->pos, Vector2Scale(p->vel, gp->dt));
+        p->vel = Vector2Subtract(p->vel, Vector2Scale(p->vel, p->friction*gp->dt));
 
         if(p->radius > 0) {
-          p->radius -= p->shrink * gp->timestep;
+          p->radius -= p->shrink * gp->dt;
         }
 
-        p->live += gp->timestep;
+        p->live += gp->dt;
 
       } /* particle_update */
 
@@ -4490,7 +5404,7 @@ update_end:;
           game_over_hint_timer = 0;
           game_over_hint_on = !game_over_hint_on;
         } else {
-          game_over_hint_timer += gp->timestep;
+          game_over_hint_timer += gp->dt;
         }
 
         if(game_over_hint_on) {
@@ -4565,7 +5479,7 @@ update_end:;
           hint_on = !hint_on;
           hint_blink_time = 0;
         } else {
-          hint_blink_time += gp->timestep;
+          hint_blink_time += gp->dt;
         }
       }
 
@@ -4574,9 +5488,9 @@ update_end:;
       DrawRectangleRec(WINDOW_RECT, ColorAlpha(BLACK, Lerp(0.0f, 0.4f, Normalize(intro_screen_fade_timer, 0, INTRO_SCREEN_FADE_TIME))));
 
       if(intro_screen_fade_timer < INTRO_SCREEN_FADE_TIME) {
-        intro_screen_fade_timer += gp->timestep;
+        intro_screen_fade_timer += gp->dt;
       } else if(intro_screen_colonel_delay > 0.0f) {
-        intro_screen_colonel_delay -= gp->timestep;
+        intro_screen_colonel_delay -= gp->dt;
       } else {
 
         { /* update colonel fu */
@@ -4658,7 +5572,7 @@ update_end:;
         } /* draw colonel fu */
 
         if(intro_screen_pre_message_delay > 0) {
-          intro_screen_pre_message_delay -= gp->timestep;
+          intro_screen_pre_message_delay -= gp->dt;
         } else if(intro_screen_cur_message >= ARRLEN(intro_screen_messages)) {
           gp->next_state = GAME_STATE_SPAWN_PLAYER;
         } else {
@@ -4674,7 +5588,7 @@ update_end:;
               intro_screen_type_char_timer = 0;
               intro_screen_chars_typed += 1;
             } else {
-              intro_screen_type_char_timer += gp->timestep;
+              intro_screen_type_char_timer += gp->dt;
             }
 
           }
@@ -4699,7 +5613,7 @@ update_end:;
                 intro_screen_cursor_blink_timer = 0;
                 intro_screen_cursor_on = !intro_screen_cursor_on;
               } else {
-                intro_screen_cursor_blink_timer += gp->timestep;
+                intro_screen_cursor_blink_timer += gp->dt;
               }
             }
 
@@ -4743,7 +5657,7 @@ update_end:;
     } else if(gp->state == GAME_STATE_VICTORY) {
 
       if(victory_screen_pre_delay > 0) {
-        victory_screen_pre_delay -= gp->timestep;
+        victory_screen_pre_delay -= gp->dt;
       } else {
 
         Arena_scope scope = scope_begin(gp->scratch);
@@ -4763,7 +5677,7 @@ update_end:;
                 victory_screen_type_dir = -1;
                 victory_screen_target_len = 0;
               } else {
-                victory_screen_show_timer -= gp->timestep;
+                victory_screen_show_timer -= gp->dt;
               }
             } else {
               ASSERT(victory_screen_type_dir == -1);
@@ -4776,7 +5690,7 @@ update_end:;
               victory_screen_chars_typed += victory_screen_type_dir;
               victory_screen_type_char_timer = 0;
             } else {
-              victory_screen_type_char_timer += gp->timestep;
+              victory_screen_type_char_timer += gp->dt;
             }
 
           }
@@ -4795,14 +5709,14 @@ update_end:;
 
         } else {
           if(victory_screen_score_delay > 0) {
-            victory_screen_score_delay -= gp->timestep;
+            victory_screen_score_delay -= gp->dt;
           } else {
 
             Str8 score_banner = push_str8f(gp->scratch,
                 "SCORE: %i", victory_screen_score_counter);
 
             if(victory_screen_pre_counter_delay > 0) {
-              victory_screen_pre_counter_delay -= gp->timestep;
+              victory_screen_pre_counter_delay -= gp->dt;
             } else {
               //if(victory_screen_inc_score_timer >= COUNTING_SPEED) {
               //  victory_screen_inc_score_timer = 0;
@@ -4815,7 +5729,7 @@ update_end:;
                 }
 
               //} else {
-              //  victory_screen_inc_score_timer += gp->timestep;
+              //  victory_screen_inc_score_timer += gp->dt;
               //}
             }
 
@@ -4837,7 +5751,7 @@ update_end:;
                 victory_screen_hint_timer = 0;
                 victory_screen_restart_hint_on = !victory_screen_restart_hint_on;
               } else {
-                victory_screen_hint_timer += gp->timestep;
+                victory_screen_hint_timer += gp->dt;
               }
 
               char *hint = "press enter to play again";
@@ -4910,7 +5824,7 @@ update_end:;
         hint_on = !hint_on;
         hint_blink_time = 0;
       } else {
-        hint_blink_time += gp->timestep;
+        hint_blink_time += gp->dt;
       }
 
     }
@@ -4926,7 +5840,7 @@ update_end:;
         (float)GetScreenWidth() / WINDOW_WIDTH,
         (float)GetScreenHeight() / WINDOW_HEIGHT);
 
-    scale = ceilf(scale);
+    scale = roundf(scale);
     //if(scale < 1.0) {
     //  //scale = 1.0;
     //  scale = roundf(scale);
@@ -4950,7 +5864,6 @@ update_end:;
       char *debug_text = frame_push_array(char, 256);
       char *debug_text_fmt =
         "sound: %s\n"
-        "auto_hot_reload: %s\n"
         "player_is_invincible: %s\n"
         "frame time: %.7f\n"
         "live entities count: %i\n"
@@ -4969,9 +5882,8 @@ update_end:;
       stbsp_sprintf(debug_text,
           debug_text_fmt,
           (gp->debug_flags & GAME_DEBUG_FLAG_MUTE) ? "off" : "on",
-          (gp->debug_flags & GAME_DEBUG_FLAG_HOT_RELOAD) ? "on" : "off",
           (gp->debug_flags & GAME_DEBUG_FLAG_PLAYER_INVINCIBLE) ? "on" : "off",
-          gp->timestep,
+          gp->dt,
           gp->live_entities,
           gp->live_enemies,
           gp->live_particles,

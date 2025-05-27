@@ -37,6 +37,8 @@ char* scratch_push_cstrf(char *fmt, ...);
 #define scratch_scope_end(scope) scope_end((scope))
 #define scratch_scope() for(Arena_scope __scope__ = scope_begin(context_scratch_arena), __dummy_scope__ = {0}; !__dummy_scope__.pos; __dummy_scope__.pos += 1, scope_end(__scope__))
 
+#define scratch_arr_init(arr) arr_init((arr), context_scratch_arena)
+
 #endif
 
 

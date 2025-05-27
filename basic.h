@@ -323,6 +323,8 @@ typedef uint16_t b16;
 typedef uint32_t b32;
 typedef uint64_t b64;
 
+typedef void* void_ptr;
+typedef char* char_ptr;
 
 #endif
 

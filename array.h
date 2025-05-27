@@ -22,8 +22,8 @@ struct __Slice_header {
 };
 
 #define DECL_ARR_TYPE(T) \
-  typedef struct Arr__##T Arr__##T; \
-  struct Arr__##T {                 \
+  typedef struct Arr_##T Arr_##T; \
+  struct Arr_##T {                 \
     T *d;                           \
     s64 count;                      \
     s64 cap;                        \
@@ -31,8 +31,8 @@ struct __Slice_header {
   };                                \
 
 #define DECL_SLICE_TYPE(T) \
-  typedef struct Slice__##T Slice__##T; \
-  struct Slice__##T {                   \
+  typedef struct Slice_##T Slice_##T; \
+  struct Slice_##T {                   \
     T *d;                               \
     s64 count;                          \
   };                                    \
@@ -41,8 +41,8 @@ struct __Slice_header {
 #define ARRAY_DEFAULT_CAP 64
 
 
-#define Arr(T)   Arr__##T
-#define Slice(T) Slice__##T
+#define Arr(T)   Arr_##T
+#define Slice(T) Slice_##T
 
 #define header_from_arr(arr)         (*(__Arr_header*)(void*)(&(arr)))
 #define header_from_arr_ptr(arr)     (*(__Arr_header*)(void*)(arr))
