@@ -23,9 +23,9 @@ typedef enum Sprite_flag_index {
     SPRITE_FLAG_INDEX_MAX,
 } Sprite_flag_index;
 
-STATIC_ASSERT(SPRITE_FLAG_INDEX_MAX < 64, number_of_sprite_flags_is_less_than_64);
+STATIC_ASSERT(SPRITE_FLAG_INDEX_MAX < 32, number_of_sprite_flags_is_less_than_32);
 
-typedef u64 Sprite_flags;
+typedef u32 Sprite_flags;
 #define X(flag) const Sprite_flags SPRITE_FLAG_##flag = (Sprite_flags)(1u << SPRITE_FLAG_INDEX_##flag);
 SPRITE_FLAGS
 #undef X
@@ -46,6 +46,8 @@ struct Sprite_frame_slice {
 
 typedef struct Sprite Sprite;
 struct Sprite {
+  u32 id;
+
   Sprite_flags flags;
 
   union {

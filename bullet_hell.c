@@ -698,6 +698,8 @@ struct Game {
   Sound boss_die;
 
   Music music;
+  b32 music_pos_saved;
+  f32 music_pos;
 
 };
 
@@ -762,6 +764,7 @@ void draw_sprite(Game *gp, Entity *ep);
 void sprite_update(Game *gp, Entity *ep);
 Sprite_frame sprite_current_frame(Sprite sp);
 b32 sprite_at_keyframe(Sprite sp, s32 keyframe);
+b32 sprite_equals(Sprite a, Sprite b);
 
 
 /*
@@ -3033,6 +3036,10 @@ b32 sprite_at_keyframe(Sprite sp, s32 keyframe) {
   return result;
 }
 
+b32 sprite_equals(Sprite a, Sprite b) {
+  return !!(a.id == b.id);
+}
+
 void draw_sprite(Game *gp, Entity *ep) {
   Sprite sp = ep->sprite;
   Vector2 pos = ep->pos;
@@ -3131,6 +3138,12 @@ void game_load_assets(Game *gp) {
 
   gp->music = LoadMusicStream("./sounds/synthwave.ogg");
 
+  if(gp->music_pos_saved) {
+    gp->music_pos_saved = 0;
+    SeekMusicStream(gp->music, gp->music_pos);
+    PlayMusicStream(gp->music);
+  }
+
 }
 
 void game_unload_assets(Game *gp) {
@@ -3139,6 +3152,8 @@ void game_unload_assets(Game *gp) {
   UnloadTexture(gp->sprite_atlas);
   UnloadTexture(gp->background_texture);
 
+  gp->music_pos_saved = 1;
+  gp->music_pos = GetMusicTimePlayed(gp->music);
   StopMusicStream(gp->music);
   UnloadMusicStream(gp->music);
 
@@ -4588,14 +4603,23 @@ void game_update_and_draw(Game *gp) {
 
                 ep->accel = (Vector2){0};
 
-                if(gp->input_flags & INPUT_FLAG_MOVE){
+                if(gp->input_flags & INPUT_FLAG_MOVE) {
+
+                  b8 at_end_of_strafe =
+                    (sprite_at_keyframe(ep->sprite, SPRITE_KEYFRAME_SPITFIRE_STRAFE_END) &&
+                     sprite_equals(ep->sprite, SPRITE_SPITFIRE_STRAFE));
 
                   if(gp->input_flags & INPUT_FLAG_MOVE_LEFT) {
                     ep->accel.x = -PLAYER_ACCEL;
                     
                     if(was_not_moving) {
-                      //ep->sprite = SPRITE_SHIP_STRAFE;
-                      //ep->sprite.flags |= SPRITE_FLAG_DRAW_MIRRORED_X;
+                      ep->sprite = SPRITE_SPITFIRE_STRAFE;
+                      ep->sprite.flags |= SPRITE_FLAG_DRAW_MIRRORED_X;
+                    }
+
+                    if(at_end_of_strafe) {
+                      ep->sprite = SPRITE_SPITFIRE_STRAFE_3;
+                      ep->sprite.flags |= SPRITE_FLAG_DRAW_MIRRORED_X;
                     }
 
                   }
@@ -4604,7 +4628,11 @@ void game_update_and_draw(Game *gp) {
                     ep->accel.x += PLAYER_ACCEL;
 
                     if(was_not_moving) {
-                      //ep->sprite = SPRITE_SHIP_STRAFE;
+                      ep->sprite = SPRITE_SPITFIRE_STRAFE;
+                    }
+
+                    if(at_end_of_strafe) {
+                      ep->sprite = SPRITE_SPITFIRE_STRAFE_3;
                     }
 
                   }
@@ -4623,17 +4651,22 @@ void game_update_and_draw(Game *gp) {
 
                 } else {
 
-                  // TODO strafing animation for the spitfire
-#if 0
                   if(was_moving_left) {
-                    ep->sprite = SPRITE_SHIP_STRAFE;
+                    ep->sprite = SPRITE_SPITFIRE_STRAFE;
                     ep->sprite.flags |= SPRITE_FLAG_REVERSE;
                     ep->sprite.flags |= SPRITE_FLAG_DRAW_MIRRORED_X;
                   } else if(was_moving_right) {
-                    ep->sprite = SPRITE_SHIP_STRAFE;
+                    ep->sprite = SPRITE_SPITFIRE_STRAFE;
                     ep->sprite.flags |= SPRITE_FLAG_REVERSE;
                   }
-#endif
+
+                  b8 at_beginning_of_strafe =
+                    (sprite_at_keyframe(ep->sprite, SPRITE_KEYFRAME_SPITFIRE_STRAFE_BEGIN) &&
+                     sprite_equals(ep->sprite, SPRITE_SPITFIRE_STRAFE));
+
+                  if(at_beginning_of_strafe) {
+                    ep->sprite = SPRITE_SPITFIRE_IDLE;
+                  }
 
                   ep->vel = (Vector2){0};
                 }

@@ -699,6 +699,8 @@ int bootstrap_project(void) {
 
   if(!build_raylib()) return 0;
   if(!build_metaprogram()) return 0;
+  if(!run_metaprogram()) return 0;
+  if(!run_tags()) return 0;
   if(!build_hot_reload()) return 0;
 
   return 1;
@@ -710,7 +712,7 @@ int load_nob_project_file(void) {
 
   Str8 cur_dir = os_get_current_dir();
 
-  for(int i = 0; i < 5; i++) {
+  for(int i = 0; i < 4; i++) {
     if(!nob_read_entire_file(".project.nob", &sb)) {
       if(!nob_set_current_dir("..")) {
         nob_log(NOB_ERROR, "no .project.nob file found, please run bootstrap_project() before trying to build");
@@ -775,7 +777,7 @@ int main(int argc, char **argv) {
   //if(!build_release()) return 1;
   //if(!build_wasm()) return 1;
   //if(!build_itch()) return 1;
-  //if(!build_hot_reload_no_cradle()) return 1;
+  if(!build_hot_reload_no_cradle()) return 1;
   //if(!build_hot_reload()) return 1;
 
 

@@ -1,5 +1,5 @@
-#include "third_party/raylib/raylib.h"
-#include "third_party/raylib/raymath.h"
+#include "raylib.h"
+#include "raymath.h"
 #include "basic.h"
 #include "arena.h"
 #include "str.h"
@@ -92,13 +92,17 @@ Color color_from_hexcode(Str8 hexcode) {
 
 int main(void) {
 
+  //SetTraceLogLevel(LOG_NONE);
+
   context_init();
 
   JSON_parser json_parser;
 
   TraceLog(LOG_INFO, "generating sprite atlas png and metadata");
   
+  // TODO steal comand execution code from nob.h
   ASSERT(!system("aseprite -b ./aseprite/*.aseprite --sheet-pack --list-tags --filename-format '{title}/{frame}' --tagname-format '{title}/{tag}' --sheet "ATLAS_IMAGE_PATH" --format json-array --data "ATLAS_METADATA_PATH));
+  // new command: aseprite -b --split-layers ./aseprite/*.aseprite --sheet-pack --list-tags --filename-format '{title}/{frame}/{layer}' --all-layers --tagname-format '{title}/{tag}' --sheet test.png --format json-array --data test.json
 
   if(!FileExists(ATLAS_METADATA_PATH)) {
     TraceLog(LOG_ERROR, "no "ATLAS_METADATA_PATH" was generated");
@@ -619,6 +623,8 @@ int main(void) {
       Arena_scope scope = scope_begin(context_scratch_arena);
       Str8 sprites_code = {0};
 
+      u32 sprite_id = 0;
+
       for(int i = 0; i < atlas->meta.frame_tags_count; i++) {
         Aseprite_frame_tag tag = atlas->meta.frame_tags[i];
 
@@ -640,8 +646,8 @@ int main(void) {
         if(tag.to == tag.from) {
           sprites_code =
             scratch_push_str8f(
-                "%Sconst Sprite SPRITE_%S_%S = { .flags = SPRITE_FLAG_STILL, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
-                sprites_code, str8_to_upper(context_scratch_arena, tag.file_title), str8_to_upper(context_scratch_arena, tag.tag_name), tag_first_frame, tag_last_frame);
+                "%Sconst Sprite SPRITE_%S_%S = { .id = %u, .flags = SPRITE_FLAG_STILL, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
+                sprites_code, str8_to_upper(context_scratch_arena, tag.file_title), str8_to_upper(context_scratch_arena, tag.tag_name), sprite_id++, tag_first_frame, tag_last_frame);
         } else {
           s64 fps = 1000/atlas->frames[range.first_frame].duration;
 
@@ -672,8 +678,8 @@ int main(void) {
 
           sprites_code =
             scratch_push_str8f(
-                "%Sconst Sprite SPRITE_%S_%S = { .flags = %S, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
-                sprites_code, str8_to_upper(context_scratch_arena, tag.file_title), str8_to_upper(context_scratch_arena, tag.tag_name), flags_str, tag_first_frame, tag_last_frame, fps, tag_last_frame - tag_first_frame + 1);
+                "%Sconst Sprite SPRITE_%S_%S = { .id = %u, .flags = %S, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
+                sprites_code, str8_to_upper(context_scratch_arena, tag.file_title), str8_to_upper(context_scratch_arena, tag.tag_name), sprite_id++, flags_str, tag_first_frame, tag_last_frame, fps, tag_last_frame - tag_first_frame + 1);
         }
 
       }
@@ -695,8 +701,8 @@ int main(void) {
         if(range.first_frame == range.last_frame) {
           sprites_code =
             scratch_push_str8f(
-                "%Sconst Sprite SPRITE_%S = { .flags = SPRITE_FLAG_STILL, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
-                sprites_code, str8_to_upper(context_scratch_arena, range.file_title), range.first_frame, range.last_frame);
+                "%Sconst Sprite SPRITE_%S = { .id = %u, .flags = SPRITE_FLAG_STILL, .first_frame = %li, .last_frame = %li, .total_frames = 1 };\n",
+                sprites_code, str8_to_upper(context_scratch_arena, range.file_title), sprite_id++, range.first_frame, range.last_frame);
         } else {
 
           for(s64 fi = range.first_frame; fi < range.last_frame; fi++) {
@@ -711,8 +717,8 @@ int main(void) {
 
           sprites_code =
             scratch_push_str8f(
-                "%Sconst Sprite SPRITE_%S = { .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
-                sprites_code, str8_to_upper(context_scratch_arena, range.file_title), range.first_frame, range.last_frame, fps, range.last_frame - range.first_frame + 1);
+                "%Sconst Sprite SPRITE_%S = { .id = %u, .flags = SPRITE_FLAG_INFINITE_REPEAT, .first_frame = %li, .last_frame = %li, .fps = %li, .total_frames = %li };\n",
+                sprites_code, str8_to_upper(context_scratch_arena, range.file_title), sprite_id++, range.first_frame, range.last_frame, fps, range.last_frame - range.first_frame + 1);
         }
 
       }
